@@ -20,12 +20,49 @@ ui <- fluidPage(
             "continuous, and its first and second derivatives are also continuous",
             "at every interior point. This makes the curve appear smooth without",
             "the oscillations often seen in high-degree polynomial interpolation."),
+          
           h4("Why use it?"),
           tags$ul(
             tags$li("Produces a smooth curve through all given points."),
             tags$li("Avoids oscillations common with high-degree polynomials."),
-            tags$li("Useful for estimating values between known data points.")
+            tags$li("Useful for estimating values between known data points."),
+            tags$li("Maintains smoothness with minimal curvature.")
           ),
+          
+          h4("Mathematical Foundation"),
+          p("For n data points (x₀, y₀), (x₁, y₁), ..., (xₙ₋₁, yₙ₋₁),"),
+          p("a natural cubic spline S(x) is defined as n-1 cubic polynomials:"),
+          p("S(x) = aᵢ + bᵢ(x - xᵢ) + cᵢ(x - xᵢ)² + dᵢ(x - xᵢ)³"),
+          p("where the polynomial Sᵢ(x) applies on interval [xᵢ, xᵢ₊₁]"),
+          
+          h4("Spline Construction Conditions"),
+          p("The cubic polynomials must satisfy these conditions:"),
+          tags$ol(
+            tags$li("Interpolation: S(xᵢ) = yᵢ for all data points"),
+            tags$li("Continuity: Sᵢ(xᵢ₊₁) = Sᵢ₊₁(xᵢ₊₁)"),
+            tags$li("First derivative continuity: S'ᵢ(xᵢ₊₁) = S'ᵢ₊₁(xᵢ₊₁)"),
+            tags$li("Second derivative continuity: S''ᵢ(xᵢ₊₁) = S''ᵢ₊₁(xᵢ₊₁)"),
+            tags$li("Natural boundary conditions: S''(x₀) = 0 and S''(xₙ₋₁) = 0")
+          ),
+          
+          h4("Step-by-Step Algorithm"),
+          tags$ol(
+            tags$li(strong("Step 1: Sort Data"), " — Arrange points in increasing x order"),
+            tags$li(strong("Step 2: Compute Differences"), " — Calculate Δxᵢ = xᵢ₊₁ - xᵢ and Δyᵢ = yᵢ₊₁ - yᵢ"),
+            tags$li(strong("Step 3: Set up System"), " — Create a tridiagonal system from continuity conditions"),
+            tags$li(strong("Step 4: Solve for Second Derivatives"), " — Solve the linear system to find Mᵢ values (second derivatives)"),
+            tags$li(strong("Step 5: Calculate Coefficients"), " — Compute aᵢ, bᵢ, cᵢ, dᵢ for each polynomial segment"),
+            tags$li(strong("Step 6: Interpolate"), " — Evaluate the appropriate cubic polynomial at the query point")
+          ),
+          
+          h4("Key Properties"),
+          tags$ul(
+            tags$li("Smooth: Both function and derivatives are continuous"),
+            tags$li("Local: Each spline segment depends only on nearby points"),
+            tags$li("Natural: Zero second derivatives at boundaries (no artificial curvature)"),
+            tags$li("Unique: For given data points and boundary conditions, one spline exists")
+          ),
+          
           h4("How to use this app"),
           tags$ol(
             tags$li("Go to the 'Calculator' tab."),
