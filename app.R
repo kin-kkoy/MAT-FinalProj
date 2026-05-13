@@ -17,7 +17,7 @@ help_tip <- function(text) {
 compute_spline <- function(x, y) {
   n <- length(x) - 1
   h <- diff(x)
-
+  
   if (n >= 2) {
     A   <- matrix(0, n - 1, n - 1)
     rhs <- numeric(n - 1)
@@ -26,23 +26,23 @@ compute_spline <- function(x, y) {
       A[i, i]        <- 2 * (h[i] + h[i + 1])
       if (i < n - 1) A[i, i + 1] <- h[i + 1]
       rhs[i] <- 3 * ((y[i + 2] - y[i + 1]) / h[i + 1] -
-                     (y[i + 1] - y[i])     / h[i])
+                       (y[i + 1] - y[i])     / h[i])
     }
     c_inner <- solve(A, rhs)
   } else {
     A <- NULL; rhs <- NULL; c_inner <- numeric(0)
   }
   c_full <- c(0, c_inner, 0)
-
+  
   a <- y[1:n]
   b <- numeric(n)
   d <- numeric(n)
   for (i in 1:n) {
     b[i] <- (y[i + 1] - y[i]) / h[i] -
-            h[i] * (2 * c_full[i] + c_full[i + 1]) / 3
+      h[i] * (2 * c_full[i] + c_full[i + 1]) / 3
     d[i] <- (c_full[i + 1] - c_full[i]) / (3 * h[i])
   }
-
+  
   list(x = x, y = y, h = h,
        a = a, b = b, c = c_full[1:n], d = d,
        c_full = c_full, A = A, rhs = rhs)
@@ -359,207 +359,208 @@ ui <- fluidPage(
       background: #F26D80;
     }
   ")),
-
+  
   div(class = "title-hero",
-    h1("Cubic Spline Interpolation"),
-    div(class = "tagline",
-      "Draw a smooth curve through any set of points — ",
-      "an interactive guide to a classic numerical method.")
+      h1("Cubic Spline Interpolation"),
+      div(class = "tagline",
+          "Draw a smooth curve through any set of points — ",
+          "an interactive guide to a classic numerical method.")
   ),
-
+  
   tabsetPanel(id = "main_tabs",
-    # ---- Introduction / Learn Tab ----
-    tabPanel("Introduction",
-      fluidRow(
-        column(width = 10, offset = 1,
-          div(class = "card card-hero",
-            h2("What is a cubic spline?"),
-            div(class = "tag",
-              "Imagine connecting dots on a graph — but instead of straight ",
-              "lines that kink at every point, you want one perfectly smooth ",
-              "curve. That's what a cubic spline does."
-            )
-          ),
-
-          div(class = "card",
-            h3("See it in action"),
-            p(style = "color:#718096;",
-              "Same five points, two different ways of joining them. ",
-              "Look at the difference:"),
-            fluidRow(
-              column(6,
-                plotlyOutput("intro_plot_lines", height = "240px"),
-                div(class = "plot-caption",
-                  HTML("<strong>Straight lines</strong> &mdash; sharp corners at every point.")
-                )
+              # ---- Introduction / Learn Tab ----
+              tabPanel("Introduction",
+                       fluidRow(
+                         column(width = 10, offset = 1,
+                                div(class = "card card-hero",
+                                    h2("What is a cubic spline?"),
+                                    div(class = "tag",
+                                        "Imagine connecting dots on a graph — but instead of straight ",
+                                        "lines that kink at every point, you want one perfectly smooth ",
+                                        "curve. That's what a cubic spline does.",
+                                    )
+                                ),
+                                
+                                div(class = "card",
+                                    h3("See it in action"),
+                                    p(style = "color:#718096;",
+                                      "Same five points, two different ways of joining them. ",
+                                      "Look at the difference:"),
+                                    fluidRow(
+                                      column(6,
+                                             plotlyOutput("intro_plot_lines", height = "240px"),
+                                             div(class = "plot-caption",
+                                                 HTML("<strong>Straight lines</strong> &mdash; sharp corners at every point.")
+                                             )
+                                      ),
+                                      column(6,
+                                             plotlyOutput("intro_plot_spline", height = "240px"),
+                                             div(class = "plot-caption",
+                                                 HTML("<strong>Cubic spline</strong> &mdash; smooth curves the whole way.")
+                                             )
+                                      )
+                                    )
+                                ),
+                                
+                                div(class = "card",
+                                    h3("How does it work?"),
+                                    p(withMathJax("Between every pair of your data points, the spline lays down a small cubic polynomial — a curve of the form \\(a + bx + cx^2 + dx^3\\). Each piece is chosen so that where two pieces meet, they share the same value, the same slope, and the same curvature. That's why the joins are invisible.")),
+                                    
+                                    p(style = "color:#718096; font-size: 14px;",
+                                      "The flavour used here is the ", tags$em("natural"), " cubic spline: at the two endpoints the curvature is set to zero, so the curve tapers off gently rather than flicking up."
+                                    ),
+                                    
+                                    h3("Why does it work?"),
+                                    
+                                    p("Many real-world relationships are not linear. Cubic splines work because they enforce smooth connections between cubic segments, which naturally produces accurate approximations of real functions and minimizes errors that sharp or straight lines introduce. This makes later calculations (area, slope, motion) much more accurate and stable.")
+                                    
+                                    
+                                ),
+                                
+                                div(class = "card",
+                                    h3("Where is it used?"),
+                                    tags$ul(class = "uses-list",
+                                            tags$li(tags$strong("Animation & games — "),
+                                                    "smooth motion paths for characters and cameras."),
+                                            tags$li(tags$strong("Typography — "),
+                                                    "the curves of letterforms in modern fonts."),
+                                            tags$li(tags$strong("Computer-aided design — "),
+                                                    "shaping car bodies, aircraft wings, product surfaces."),
+                                            tags$li(tags$strong("Data analysis — "),
+                                                    "filling in missing measurements between known samples."),
+                                            tags$li(tags$strong("Engineering — "),
+                                                    "approximating complex functions with something easy to compute.")
+                                    )
+                                ),
+                                
+                                div(class = "card",
+                                    h3("Using this app"),
+                                    tags$ol(class = "howto-list",
+                                            tags$li(tags$strong("Type in your points."),
+                                                    " On the Calculator tab, fill the X / Y table with the ",
+                                                    "coordinates you want the curve to pass through."),
+                                            tags$li(tags$strong("Pick an x to estimate."),
+                                                    " Tell the app which x-value you want a smooth-curve ",
+                                                    "y-value for."),
+                                            tags$li(tags$strong("Read the answer."),
+                                                    " The estimate, an interactive plot, the full derivation, ",
+                                                    "and the polynomial formulas are all there for you.")
+                                    ),
+                                    div(style = "text-align:center; margin-top: 20px;",
+                                        actionButton("go_to_calc",
+                                                     HTML("Try it yourself &rarr;"),
+                                                     class = "btn-primary-coral")
+                                    )
+                                )
+                         )
+                       )
               ),
-              column(6,
-                plotlyOutput("intro_plot_spline", height = "240px"),
-                div(class = "plot-caption",
-                  HTML("<strong>Cubic spline</strong> &mdash; smooth curves the whole way.")
-                )
+              
+              # ---- Calculator Tab ----
+              tabPanel("Calculator",
+                       sidebarLayout(
+                         sidebarPanel(
+                           h4("Your data points ",
+                              help_tip(paste0(
+                                "Each row is one (x, y) pair. The spline will pass through ",
+                                "every point you list here. Add or remove rows with the ",
+                                "buttons below."))),
+                           fluidRow(
+                             column(6, actionButton("add_row",    "+ Add row",    width = "100%")),
+                             column(6, actionButton("remove_row", "- Remove row", width = "100%"))
+                           ),
+                           br(),
+                           uiOutput("point_inputs"),
+                           br(),
+                           tags$label("Estimate y at this x ",
+                                      help_tip(paste0(
+                                        "The app reads the smooth curve at this x value and ",
+                                        "tells you what y is there. Pick any x between your ",
+                                        "smallest and largest data point."))),
+                           numericInput("x_query", label = NULL, value = 3.5),
+                           helpText("You need at least 3 points, and every x-value must be unique.")
+                         ),
+                         
+                         mainPanel(
+                           tabsetPanel(
+                             tabPanel("Result & Plot",
+                                      div(class = "card",
+                                          h4("Estimated value"),
+                                          uiOutput("result_callout")
+                                      ),
+                                      div(class = "card",
+                                          h4("Curve through your points"),
+                                          p(style = "color:#718096; font-size:14px; margin-top:-4px;",
+                                            HTML("<strong>Tip:</strong> hover the curve to read values, ",
+                                                 "drag a box to zoom in, double-click to reset.")),
+                                          plotlyOutput("splinePlot", height = "450px")
+                                      )
+                             ),
+                             tabPanel("Build piece by piece",
+                                      br(),
+                                      div(class = "card",
+                                          h4("Watch the spline assemble"),
+                                          p(style = "color:#718096; font-size:14px; margin-top:-4px;",
+                                            HTML("A cubic spline isn't built by iterating until something ",
+                                                 "converges &mdash; it's built piece by piece, one cubic ",
+                                                 "polynomial per gap between your points. Move the slider ",
+                                                 "below to add one piece at a time and watch the curve ",
+                                                 "grow.")),
+                                          sliderInput("piece_count",
+                                                      label = "Pieces drawn:",
+                                                      min = 1, max = 6, value = 1, step = 1,
+                                                      width = "100%"),
+                                          plotlyOutput("build_plot", height = "400px")
+                                      ),
+                                      div(class = "card",
+                                          h4("Latest piece"),
+                                          p(style = "color:#718096; font-size:14px; margin-top:-4px;",
+                                            "The cubic polynomial that fills the most recently added gap."),
+                                          uiOutput("build_current")
+                                      ),
+                                      div(class = "card",
+                                          h4("Pieces built so far"),
+                                          p(style = "color:#718096; font-size:14px; margin-top:-4px;",
+                                            "Each row is one cubic piece of the spline, with its width ",
+                                            HTML("(<em>h</em>) and the four coefficients ",
+                                                 "<em>a, b, c, d</em>.")),
+                                          uiOutput("build_table")
+                                      )
+                             ),
+                             tabPanel("How it works",
+                                      br(),
+                                      uiOutput("steps_ui")
+                             )
+                           )
+                         )
+                       )
+              ),
+              
+              # ---- Solution Tab ----
+              tabPanel("Solution",
+                       fluidRow(
+                         column(width = 10, offset = 1,
+                                withMathJax(),
+                                br(),
+                                uiOutput("solution_ui")
+                         )
+                       )
               )
-            )
-          ),
-
-          div(class = "card",
-            h3("How does it work?"),
-            p("Between every pair of your data points, the spline lays down a ",
-              "small cubic polynomial — a curve of the form ",
-              tags$em("a + b·x + c·x² + d·x³"), ". ",
-              "Each piece is chosen so that where two pieces meet, they share ",
-              "the same value, the same slope, and the same curvature. ",
-              "That's why the joins are invisible."),
-            p(style = "color:#718096; font-size: 14px;",
-              "The flavour used here is the ", tags$em("natural"), " cubic ",
-              "spline: at the two endpoints the curvature is set to zero, ",
-              "so the curve tapers off gently rather than flicking up.")
-          ),
-
-          div(class = "card",
-            h3("Where is it used?"),
-            tags$ul(class = "uses-list",
-              tags$li(tags$strong("Animation & games — "),
-                "smooth motion paths for characters and cameras."),
-              tags$li(tags$strong("Typography — "),
-                "the curves of letterforms in modern fonts."),
-              tags$li(tags$strong("Computer-aided design — "),
-                "shaping car bodies, aircraft wings, product surfaces."),
-              tags$li(tags$strong("Data analysis — "),
-                "filling in missing measurements between known samples."),
-              tags$li(tags$strong("Engineering — "),
-                "approximating complex functions with something easy to compute.")
-            )
-          ),
-
-          div(class = "card",
-            h3("Using this app"),
-            tags$ol(class = "howto-list",
-              tags$li(tags$strong("Type in your points."),
-                " On the Calculator tab, fill the X / Y table with the ",
-                "coordinates you want the curve to pass through."),
-              tags$li(tags$strong("Pick an x to estimate."),
-                " Tell the app which x-value you want a smooth-curve ",
-                "y-value for."),
-              tags$li(tags$strong("Read the answer."),
-                " The estimate, an interactive plot, the full derivation, ",
-                "and the polynomial formulas are all there for you.")
-            ),
-            div(style = "text-align:center; margin-top: 20px;",
-              actionButton("go_to_calc",
-                HTML("Try it yourself &rarr;"),
-                class = "btn-primary-coral")
-            )
-          )
-        )
-      )
-    ),
-
-    # ---- Calculator Tab ----
-    tabPanel("Calculator",
-      sidebarLayout(
-        sidebarPanel(
-          h4("Your data points ",
-             help_tip(paste0(
-               "Each row is one (x, y) pair. The spline will pass through ",
-               "every point you list here. Add or remove rows with the ",
-               "buttons below."))),
-          fluidRow(
-            column(6, actionButton("add_row",    "+ Add row",    width = "100%")),
-            column(6, actionButton("remove_row", "- Remove row", width = "100%"))
-          ),
-          br(),
-          uiOutput("point_inputs"),
-          br(),
-          tags$label("Estimate y at this x ",
-                     help_tip(paste0(
-                       "The app reads the smooth curve at this x value and ",
-                       "tells you what y is there. Pick any x between your ",
-                       "smallest and largest data point."))),
-          numericInput("x_query", label = NULL, value = 3.5),
-          helpText("You need at least 3 points, and every x-value must be unique.")
-        ),
-
-        mainPanel(
-          tabsetPanel(
-            tabPanel("Result & Plot",
-              div(class = "card",
-                h4("Estimated value"),
-                uiOutput("result_callout")
-              ),
-              div(class = "card",
-                h4("Curve through your points"),
-                p(style = "color:#718096; font-size:14px; margin-top:-4px;",
-                  HTML("<strong>Tip:</strong> hover the curve to read values, ",
-                       "drag a box to zoom in, double-click to reset.")),
-                plotlyOutput("splinePlot", height = "450px")
-              )
-            ),
-            tabPanel("Build piece by piece",
-              br(),
-              div(class = "card",
-                h4("Watch the spline assemble"),
-                p(style = "color:#718096; font-size:14px; margin-top:-4px;",
-                  HTML("A cubic spline isn't built by iterating until something ",
-                       "converges &mdash; it's built piece by piece, one cubic ",
-                       "polynomial per gap between your points. Move the slider ",
-                       "below to add one piece at a time and watch the curve ",
-                       "grow.")),
-                sliderInput("piece_count",
-                            label = "Pieces drawn:",
-                            min = 1, max = 6, value = 1, step = 1,
-                            width = "100%"),
-                plotlyOutput("build_plot", height = "400px")
-              ),
-              div(class = "card",
-                h4("Latest piece"),
-                p(style = "color:#718096; font-size:14px; margin-top:-4px;",
-                  "The cubic polynomial that fills the most recently added gap."),
-                uiOutput("build_current")
-              ),
-              div(class = "card",
-                h4("Pieces built so far"),
-                p(style = "color:#718096; font-size:14px; margin-top:-4px;",
-                  "Each row is one cubic piece of the spline, with its width ",
-                  HTML("(<em>h</em>) and the four coefficients ",
-                       "<em>a, b, c, d</em>.")),
-                uiOutput("build_table")
-              )
-            ),
-            tabPanel("How it works",
-              br(),
-              uiOutput("steps_ui")
-            )
-          )
-        )
-      )
-    ),
-
-    # ---- Solution Tab ----
-    tabPanel("Solution",
-      fluidRow(
-        column(width = 10, offset = 1,
-          withMathJax(),
-          br(),
-          uiOutput("solution_ui")
-        )
-      )
-    )
   )
 )
 
 # ---- Server ----
 server <- function(input, output, session) {
-
+  
   default_x <- c(1, 2, 3, 4, 5, 6, 7)
   default_y <- c(2, 3, 5, 4, 6, 8, 7)
   n_points  <- reactiveVal(length(default_x))
-
+  
   observeEvent(input$add_row,    n_points(n_points() + 1))
   observeEvent(input$remove_row, {
     if (n_points() > 3) n_points(n_points() - 1)
   })
-
+  
   # Render the X/Y input table; preserve any values the user has typed in
   output$point_inputs <- renderUI({
     n <- n_points()
@@ -573,11 +574,11 @@ server <- function(input, output, session) {
       cur_y <- vapply(seq_len(n), get_val, numeric(1),
                       prefix = "y", defaults = default_y)
     })
-
+    
     header <- fluidRow(class = "header",
-      column(2, "#"),
-      column(5, "X"),
-      column(5, "Y")
+                       column(2, "#"),
+                       column(5, "X"),
+                       column(5, "Y")
     )
     rows <- lapply(seq_len(n), function(i) {
       fluidRow(
@@ -588,7 +589,7 @@ server <- function(input, output, session) {
     })
     div(class = "points-table", header, rows)
   })
-
+  
   # Reactive: gather and validate user-entered points
   data_points <- reactive({
     n <- n_points()
@@ -600,41 +601,41 @@ server <- function(input, output, session) {
     }
     x <- read_col("x")
     y <- read_col("y")
-
+    
     validate(
       need(n >= 3, "Please provide at least 3 points."),
       need(all(!is.na(x)), "All X values must be filled in."),
       need(all(!is.na(y)), "All Y values must be filled in."),
       need(!any(duplicated(x)), "X values must be unique.")
     )
-
+    
     ord <- order(x)
     list(x = x[ord], y = y[ord])
   })
-
+  
   # Reactive: build the natural cubic spline (manual solver)
   spline_data <- reactive({
     d <- data_points()
     compute_spline(d$x, d$y)
   })
-
+  
   # Reactive: a vectorised evaluator wrapping the manual spline
   spline_fn <- reactive({
     sp <- spline_data()
     function(xq) sapply(xq, function(x) eval_spline(sp, x))
   })
-
+  
   # Output: interpolated value as a coral callout
   output$result_callout <- renderUI({
     d <- data_points()
     f <- spline_fn()
     xq <- input$x_query
-
+    
     validate(need(!is.na(xq), "Please enter a valid x to estimate."))
-
+    
     yq <- f(xq)
     fmt <- function(v) formatC(round(v, 5), format = "g", digits = 5)
-
+    
     if (xq < min(d$x) || xq > max(d$x)) {
       div(class = "result-callout",
           style = "background:#FFF1F3; color:#7A2A3A;",
@@ -649,16 +650,16 @@ server <- function(input, output, session) {
                        fmt(xq), fmt(yq))))
     }
   })
-
+  
   # Output: interactive spline plot (plotly)
   output$splinePlot <- renderPlotly({
     d <- data_points()
     f <- spline_fn()
     xq <- input$x_query
-
+    
     x_seq <- seq(min(d$x), max(d$x), length.out = 500)
     y_seq <- f(x_seq)
-
+    
     p <- plot_ly() %>%
       add_trace(x = x_seq, y = y_seq, type = "scatter", mode = "lines",
                 line = list(color = "#3FB6A1", width = 3),
@@ -669,7 +670,7 @@ server <- function(input, output, session) {
                               line = list(color = "#FFFFFF", width = 2)),
                 name = "Your points",
                 hovertemplate = "Point<br>x = %{x}<br>y = %{y}<extra></extra>")
-
+    
     if (!is.na(xq)) {
       yq <- tryCatch(f(xq), error = function(e) NA_real_)
       if (!is.na(yq) && xq >= min(d$x) && xq <= max(d$x)) {
@@ -681,12 +682,12 @@ server <- function(input, output, session) {
           hovertemplate = "Estimate<br>x = %{x}<br>y = %{y:.4g}<extra></extra>")
       }
     }
-
+    
     p %>% layout(
       xaxis = list(title = "x", gridcolor = "#EEF0F4",
-                    zeroline = FALSE, showline = FALSE),
+                   zeroline = FALSE, showline = FALSE),
       yaxis = list(title = "y", gridcolor = "#EEF0F4",
-                    zeroline = FALSE, showline = FALSE),
+                   zeroline = FALSE, showline = FALSE),
       paper_bgcolor = "#FFFFFF",
       plot_bgcolor  = "#FFFFFF",
       margin = list(l = 50, r = 20, t = 20, b = 50),
@@ -696,9 +697,9 @@ server <- function(input, output, session) {
     ) %>%
       config(displayModeBar = FALSE)
   })
-
+  
   # ---- Build piece by piece ----
-
+  
   # Keep the slider's max in sync with the number of intervals
   observe({
     d <- data_points()
@@ -708,7 +709,7 @@ server <- function(input, output, session) {
     updateSliderInput(session, "piece_count",
                       min = 1, max = n, value = new_val)
   })
-
+  
   output$build_plot <- renderPlotly({
     d  <- data_points()
     sp <- spline_data()
@@ -716,7 +717,7 @@ server <- function(input, output, session) {
     k  <- input$piece_count
     if (is.null(k)) k <- 1
     k  <- max(1, min(k, n))
-
+    
     # Pre-compute full y range so plot doesn't rescale as pieces are added
     x_full <- seq(min(d$x), max(d$x), length.out = 300)
     y_full <- sapply(x_full, function(x) eval_spline(sp, x))
@@ -724,60 +725,60 @@ server <- function(input, output, session) {
     y_lo   <- min(d$y, y_full) - y_pad
     y_hi   <- max(d$y, y_full) + y_pad
     x_pad  <- 0.04 * diff(range(d$x))
-
+    
     p <- plot_ly()
-
+    
     # Built pieces: older ones teal, newest one coral & thicker
     for (i in seq_len(k)) {
       x_seg <- seq(sp$x[i], sp$x[i + 1], length.out = 80)
       y_seg <- sapply(x_seg, function(x) eval_spline(sp, x))
       is_latest <- (i == k)
       p <- add_trace(p,
-        x = x_seg, y = y_seg,
-        type = "scatter", mode = "lines",
-        line = list(
-          color = if (is_latest) "#F26D80" else "#3FB6A1",
-          width = if (is_latest) 4.5 else 3
-        ),
-        showlegend = FALSE,
-        hovertemplate = sprintf(
-          "Piece S<sub>%d</sub><br>x = %%{x:.4g}<br>y = %%{y:.4g}<extra></extra>",
-          i - 1))
+                     x = x_seg, y = y_seg,
+                     type = "scatter", mode = "lines",
+                     line = list(
+                       color = if (is_latest) "#F26D80" else "#3FB6A1",
+                       width = if (is_latest) 4.5 else 3
+                     ),
+                     showlegend = FALSE,
+                     hovertemplate = sprintf(
+                       "Piece S<sub>%d</sub><br>x = %%{x:.4g}<br>y = %%{y:.4g}<extra></extra>",
+                       i - 1))
     }
-
+    
     # All data points
     p <- add_trace(p,
-      x = d$x, y = d$y,
-      type = "scatter", mode = "markers",
-      marker = list(color = "#F26D80", size = 11,
-                    line = list(color = "#FFFFFF", width = 2)),
-      showlegend = FALSE,
-      hovertemplate = "Point<br>x = %{x}<br>y = %{y}<extra></extra>")
-
+                   x = d$x, y = d$y,
+                   type = "scatter", mode = "markers",
+                   marker = list(color = "#F26D80", size = 11,
+                                 line = list(color = "#FFFFFF", width = 2)),
+                   showlegend = FALSE,
+                   hovertemplate = "Point<br>x = %{x}<br>y = %{y}<extra></extra>")
+    
     # Halo on the two endpoints of the latest piece
     p <- add_trace(p,
-      x = c(sp$x[k], sp$x[k + 1]),
-      y = c(sp$y[k], sp$y[k + 1]),
-      type = "scatter", mode = "markers",
-      marker = list(color = "rgba(242,109,128,0)", size = 22,
-                    line = list(color = "#F26D80", width = 2)),
-      showlegend = FALSE,
-      hoverinfo = "skip")
-
+                   x = c(sp$x[k], sp$x[k + 1]),
+                   y = c(sp$y[k], sp$y[k + 1]),
+                   type = "scatter", mode = "markers",
+                   marker = list(color = "rgba(242,109,128,0)", size = 22,
+                                 line = list(color = "#F26D80", width = 2)),
+                   showlegend = FALSE,
+                   hoverinfo = "skip")
+    
     p %>% layout(
       xaxis = list(title = "x", gridcolor = "#EEF0F4",
-                    zeroline = FALSE, showline = FALSE,
-                    range = c(min(d$x) - x_pad, max(d$x) + x_pad)),
+                   zeroline = FALSE, showline = FALSE,
+                   range = c(min(d$x) - x_pad, max(d$x) + x_pad)),
       yaxis = list(title = "y", gridcolor = "#EEF0F4",
-                    zeroline = FALSE, showline = FALSE,
-                    range = c(y_lo, y_hi)),
+                   zeroline = FALSE, showline = FALSE,
+                   range = c(y_lo, y_hi)),
       paper_bgcolor = "#FFFFFF", plot_bgcolor = "#FFFFFF",
       margin = list(l = 50, r = 20, t = 20, b = 50),
       font = list(family = "Roboto, sans-serif", color = "#2D3748")
     ) %>%
       config(displayModeBar = FALSE)
   })
-
+  
   output$build_current <- renderUI({
     sp <- spline_data()
     n  <- length(sp$h)
@@ -785,15 +786,15 @@ server <- function(input, output, session) {
     if (is.null(k)) k <- 1
     k  <- max(1, min(k, n))
     i  <- k - 1
-
+    
     fmt <- function(v) formatC(round(v, 5), format = "g", digits = 5)
-
+    
     signed_term <- function(coef, expr) {
       if (abs(round(coef, 8)) < 1e-10) return("")
       if (coef >= 0) paste0(" + ", fmt(coef), expr)
       else            paste0(" &minus; ", fmt(-coef), expr)
     }
-
+    
     xi    <- sp$x[k]
     xterm <- sprintf("(x &minus; %s)", fmt(xi))
     poly  <- paste0(
@@ -802,7 +803,7 @@ server <- function(input, output, session) {
       signed_term(sp$c[k], paste0(xterm, "<sup>2</sup>")),
       signed_term(sp$d[k], paste0(xterm, "<sup>3</sup>"))
     )
-
+    
     HTML(sprintf(paste0(
       "<div class='build-current'>",
       "<div>Piece <strong>%d of %d</strong> &middot; ",
@@ -818,16 +819,16 @@ server <- function(input, output, session) {
       fmt(sp$x[k + 1]), fmt(sp$y[k + 1]),
       i, poly))
   })
-
+  
   output$build_table <- renderUI({
     sp <- spline_data()
     n  <- length(sp$h)
     k  <- input$piece_count
     if (is.null(k)) k <- 1
     k  <- max(1, min(k, n))
-
+    
     fmt <- function(v) formatC(round(v, 5), format = "g", digits = 5)
-
+    
     rows <- paste(sapply(seq_len(k), function(i) {
       cls <- if (i == k) " class='latest-piece'" else ""
       sprintf(paste0(
@@ -845,7 +846,7 @@ server <- function(input, output, session) {
         fmt(sp$h[i]),
         fmt(sp$a[i]), fmt(sp$b[i]), fmt(sp$c[i]), fmt(sp$d[i]))
     }), collapse = "")
-
+    
     HTML(paste0(
       "<table class='calc-table'>",
       "<thead><tr>",
@@ -859,25 +860,25 @@ server <- function(input, output, session) {
       "<tbody>", rows, "</tbody></table>"
     ))
   })
-
+  
   # ---- Intro tab: side-by-side comparison plots ----
   intro_x <- c(1, 2, 3, 4, 5)
   intro_y <- c(1, 4, 2, 5, 3)
-
+  
   apply_intro_layout <- function(p) {
     layout(p,
-      xaxis = list(title = "x", gridcolor = "#EEF0F4",
-                    zeroline = FALSE, showline = FALSE, fixedrange = TRUE),
-      yaxis = list(title = "y", gridcolor = "#EEF0F4",
-                    zeroline = FALSE, showline = FALSE, fixedrange = TRUE),
-      paper_bgcolor = "#FFFFFF",
-      plot_bgcolor  = "#FFFFFF",
-      margin = list(l = 40, r = 10, t = 10, b = 40),
-      showlegend = FALSE,
-      font = list(family = "Roboto, sans-serif", color = "#2D3748")
+           xaxis = list(title = "x", gridcolor = "#EEF0F4",
+                        zeroline = FALSE, showline = FALSE, fixedrange = TRUE),
+           yaxis = list(title = "y", gridcolor = "#EEF0F4",
+                        zeroline = FALSE, showline = FALSE, fixedrange = TRUE),
+           paper_bgcolor = "#FFFFFF",
+           plot_bgcolor  = "#FFFFFF",
+           margin = list(l = 40, r = 10, t = 10, b = 40),
+           showlegend = FALSE,
+           font = list(family = "Roboto, sans-serif", color = "#2D3748")
     )
   }
-
+  
   output$intro_plot_lines <- renderPlotly({
     p <- plot_ly(x = intro_x, y = intro_y, type = "scatter",
                  mode = "lines+markers",
@@ -887,7 +888,7 @@ server <- function(input, output, session) {
                  hoverinfo = "skip")
     config(apply_intro_layout(p), displayModeBar = FALSE)
   })
-
+  
   output$intro_plot_spline <- renderPlotly({
     sp <- compute_spline(intro_x, intro_y)
     x_seq <- seq(min(intro_x), max(intro_x), length.out = 300)
@@ -903,88 +904,90 @@ server <- function(input, output, session) {
                    hoverinfo = "skip")
     config(apply_intro_layout(p), displayModeBar = FALSE)
   })
-
+  
   # Introduction / Learn tab CTA -> Calculator
   observeEvent(input$go_to_calc, {
     updateTabsetPanel(session, "main_tabs", selected = "Calculator")
   })
-
+  
   # Output: step-by-step derivation of the spline
   output$steps_ui <- renderUI({
     sp <- spline_data()
     xq <- input$x_query
     n  <- length(sp$h)
     fmt <- function(v, k = 5) formatC(round(v, k), format = "fg", flag = "#")
-
+    
     # Step 1 -- sorted data
     s1 <- div(class = "step-box",
-      h4("Step 1: Sorted data points"),
-      p(class = "step-friendly",
-        "First, we line up your points from smallest to largest x."),
-      tags$pre(paste(
-        sprintf("(x_%d, y_%d) = (%s, %s)",
-                0:n, 0:n, fmt(sp$x), fmt(sp$y)),
-        collapse = "\n"))
+              h4("Step 1: Sorted data points"),
+              p(class = "step-friendly",
+                "First, we line up your points from smallest to largest x."),
+              tags$pre(paste(
+                sprintf("(x_%d, y_%d) = (%s, %s)",
+                        0:n, 0:n, fmt(sp$x), fmt(sp$y)),
+                collapse = "\n"))
     )
-
+    
     # Step 2 -- interval widths
     s2 <- div(class = "step-box",
-      h4("Step 2: Interval widths  h_i = x_{i+1} - x_i"),
-      p(class = "step-friendly",
-        "Next, we measure the gap between each pair of consecutive points."),
-      tags$pre(paste(
-        sprintf("h_%d = %s - %s = %s",
-                0:(n - 1), fmt(sp$x[2:(n + 1)]),
-                fmt(sp$x[1:n]), fmt(sp$h)),
-        collapse = "\n"))
+              h4(withMathJax("Step 2: Interval widths $$h_i = x_{i+1} - x_i$$")),
+              #h4("Step 2: Interval widths  h_i = x_{i+1} - x_i"),
+              p(class = "step-friendly",
+                "Next, we measure the gap between each pair of consecutive points."),
+              tags$pre(paste(
+                sprintf("h_%d = %s - %s = %s",
+                        0:(n - 1), fmt(sp$x[2:(n + 1)]),
+                        fmt(sp$x[1:n]), fmt(sp$h)),
+                collapse = "\n"))
     )
-
+    
     # Step 3 -- tridiagonal system
     if (n >= 2) {
       A_rows <- apply(sp$A, 1, function(r)
         paste(sprintf("%10s", fmt(r)), collapse = " "))
       rhs_row <- paste(sprintf("%10s", fmt(sp$rhs)), collapse = " ")
       s3 <- div(class = "step-box",
-        h4("Step 3: Tridiagonal system  A · c = r  (interior c_1 ... c_{n-1})"),
-        p(class = "step-friendly",
-          "To make the curve bend smoothly at every junction, ",
-          "we set up a small system of equations."),
-        p(HTML("Row i:  h<sub>i</sub> c<sub>i-1</sub> + 2(h<sub>i</sub>+h<sub>i+1</sub>) c<sub>i</sub> + h<sub>i+1</sub> c<sub>i+1</sub> = 3[(y<sub>i+1</sub>-y<sub>i</sub>)/h<sub>i+1</sub> - (y<sub>i</sub>-y<sub>i-1</sub>)/h<sub>i</sub>]")),
-        p("Natural boundary conditions: c_0 = 0,  c_n = 0."),
-        tags$pre(paste(c("A =", A_rows, "", "r =", rhs_row), collapse = "\n"))
+                h4("Step 3: Tridiagonal system  A · c = r  (interior c_1 ... c_{n-1})"),
+                p(class = "step-friendly",
+                  "To make the curve bend smoothly at every junction, ",
+                  "we set up a small system of equations."),
+                
+                p(withMathJax("$$h_i c_{i-1} + 2(h_i + h_{i+1})c_i + h_{i+1}c_{i+1} = 3\\left(\\frac{y_{i+1}-y_i}{h_{i+1}} - \\frac{y_i-y_{i-1}}{h_i}\\right)$$")),
+                p("Natural boundary conditions: c_0 = 0,  c_n = 0."),
+                tags$pre(paste(c("A =", A_rows, "", "r =", rhs_row), collapse = "\n"))
       )
     } else {
       s3 <- div(class = "step-box",
-        h4("Step 3: Tridiagonal system"),
-        p("Only one interval — no interior c values to solve.")
+                h4("Step 3: Tridiagonal system"),
+                p("Only one interval — no interior c values to solve.")
       )
     }
-
+    
     # Step 4 -- c values
     s4 <- div(class = "step-box",
-      h4("Step 4: Solve for c_i"),
-      p(class = "step-friendly",
-        "Solving that system tells us how much each junction should curve."),
-      tags$pre(paste(
-        sprintf("c_%d = %s", 0:n, fmt(sp$c_full)),
-        collapse = "\n"))
+              h4(withMathJax(paste0("Step 4: Solve for ", "\\(c_i\\)"))),
+              p(class = "step-friendly",
+                "Solving that system tells us how much each junction should curve."),
+              tags$pre(paste(
+                sprintf("c_%d = %s", 0:n, fmt(sp$c_full)),
+                collapse = "\n"))
     )
-
+    
     # Step 5 -- a, b, d
     rows <- paste(sprintf("  %d  %11s  %11s  %11s  %11s",
                           0:(n - 1), fmt(sp$a), fmt(sp$b),
                           fmt(sp$c), fmt(sp$d)), collapse = "\n")
     s5 <- div(class = "step-box solution-step",
-      h4("Step 5: Coefficients a_i, b_i, c_i, d_i"),
-      p(class = "step-friendly",
-        "With those values in hand we can write down four numbers ",
-        "(a, b, c, d) for every piece of the curve."),
-      p(HTML("a<sub>i</sub> = y<sub>i</sub> &nbsp; b<sub>i</sub> = (y<sub>i+1</sub>-y<sub>i</sub>)/h<sub>i</sub> - h<sub>i</sub>(2c<sub>i</sub>+c<sub>i+1</sub>)/3 &nbsp; d<sub>i</sub> = (c<sub>i+1</sub>-c<sub>i</sub>)/(3h<sub>i</sub>)")),
-      tags$pre(paste(
-        "  i         a_i          b_i          c_i          d_i",
-        rows, sep = "\n"))
+              h4(withMathJax("Step 5: Coefficients \\(a_i, b_i, c_i, d_i\\)")),
+              p(class = "step-friendly",
+                "With those values in hand we can write down four numbers ",
+                "(a, b, c, d) for every piece of the curve."),
+              p(HTML("a<sub>i</sub> = y<sub>i</sub> &nbsp; b<sub>i</sub> = (y<sub>i+1</sub>-y<sub>i</sub>)/h<sub>i</sub> - h<sub>i</sub>(2c<sub>i</sub>+c<sub>i+1</sub>)/3 &nbsp; d<sub>i</sub> = (c<sub>i+1</sub>-c<sub>i</sub>)/(3h<sub>i</sub>)")),
+              tags$pre(paste(
+                "  i         a_i          b_i          c_i          d_i",
+                rows, sep = "\n"))
     )
-
+    
     # Step 6 -- spline polynomials
     poly_lines <- sapply(1:n, function(i) {
       sprintf("S_%d(x) = %s + %s (x - %s) + %s (x - %s)^2 + %s (x - %s)^3,    x in [%s, %s]",
@@ -994,13 +997,13 @@ server <- function(input, output, session) {
               fmt(sp$x[i]), fmt(sp$x[i + 1]))
     })
     s6 <- div(class = "step-box solution-step",
-      h4("Step 6: Piecewise spline polynomials"),
-      p(class = "step-friendly",
-        "Each piece of the curve is now a tidy cubic polynomial — ",
-        "here they are, one per interval."),
-      tags$pre(paste(poly_lines, collapse = "\n"))
+              h4("Step 6: Piecewise spline polynomials"),
+              p(class = "step-friendly",
+                "Each piece of the curve is now a tidy cubic polynomial — ",
+                "here they are, one per interval."),
+              tags$pre(paste(poly_lines, collapse = "\n"))
     )
-
+    
     # Step 7 -- evaluation at x_query
     if (!is.na(xq) && xq >= sp$x[1] && xq <= sp$x[n + 1]) {
       i_r <- max(1, min(n, findInterval(xq, sp$x, all.inside = TRUE)))
@@ -1008,55 +1011,55 @@ server <- function(input, output, session) {
       dx  <- xq - sp$x[i_r]
       val <- sp$a[i_r] + sp$b[i_r] * dx + sp$c[i_r] * dx^2 + sp$d[i_r] * dx^3
       s7 <- div(class = "step-box",
-        h4(sprintf("Step 7: Evaluate at x_query = %s", fmt(xq))),
-        p(class = "step-friendly",
-          "Finally, we plug your chosen x into the right piece ",
-          "of the curve to read off the estimated y."),
-        tags$pre(paste(
-          sprintf("x_query = %s lies in [%s, %s], so use S_%d.",
-                  fmt(xq), fmt(sp$x[i_r]), fmt(sp$x[i_r + 1]), i),
-          sprintf("Delta x = x_query - x_%d = %s - %s = %s",
-                  i, fmt(xq), fmt(sp$x[i_r]), fmt(dx)),
-          sprintf("S_%d(%s) = %s + %s(%s) + %s(%s)^2 + %s(%s)^3",
-                  i, fmt(xq),
-                  fmt(sp$a[i_r]),
-                  fmt(sp$b[i_r]), fmt(dx),
-                  fmt(sp$c[i_r]), fmt(dx),
-                  fmt(sp$d[i_r]), fmt(dx)),
-          sprintf("        = %s", fmt(val)),
-          sep = "\n"))
+                h4(sprintf("Step 7: Evaluate at x_query = %s", fmt(xq))),
+                p(class = "step-friendly",
+                  "Finally, we plug your chosen x into the right piece ",
+                  "of the curve to read off the estimated y."),
+                tags$pre(paste(
+                  sprintf("x_query = %s lies in [%s, %s], so use S_%d.",
+                          fmt(xq), fmt(sp$x[i_r]), fmt(sp$x[i_r + 1]), i),
+                  sprintf("Delta x = x_query - x_%d = %s - %s = %s",
+                          i, fmt(xq), fmt(sp$x[i_r]), fmt(dx)),
+                  sprintf("S_%d(%s) = %s + %s(%s) + %s(%s)^2 + %s(%s)^3",
+                          i, fmt(xq),
+                          fmt(sp$a[i_r]),
+                          fmt(sp$b[i_r]), fmt(dx),
+                          fmt(sp$c[i_r]), fmt(dx),
+                          fmt(sp$d[i_r]), fmt(dx)),
+                  sprintf("        = %s", fmt(val)),
+                  sep = "\n"))
       )
     } else {
       s7 <- div(class = "step-box",
-        h4("Step 7: Evaluation"),
-        p(sprintf("x_query = %s is outside [%s, %s] (extrapolation — not shown).",
-                  ifelse(is.na(xq), "NA", fmt(xq)),
-                  fmt(sp$x[1]), fmt(sp$x[n + 1])))
+                h4("Step 7: Evaluation"),
+                p(sprintf("x_query = %s is outside [%s, %s] (extrapolation — not shown).",
+                          ifelse(is.na(xq), "NA", fmt(xq)),
+                          fmt(sp$x[1]), fmt(sp$x[n + 1])))
       )
     }
-
+    
     tagList(s1, s2, s3, s4, s5, s6, s7)
   })
-
+  
   # Output: presentation-friendly Solution view (MathJax)
   output$solution_ui <- renderUI({
     sp <- spline_data()
     xq <- input$x_query
     n  <- length(sp$h)
-
+    
     fmt <- function(v) {
       r <- round(v, 5)
       if (length(r) == 1 && abs(r) < 1e-10) return("0")
       formatC(r, format = "g", digits = 5)
     }
-
+    
     # Build one term of S_i(x) with proper sign and skip zero terms.
     signed_term <- function(coef, expr) {
       if (abs(round(coef, 8)) < 1e-10) return("")
       if (coef >= 0) paste0(" + ", fmt(coef), expr)
       else            paste0(" - ", fmt(-coef), expr)
     }
-
+    
     poly_latex <- function(i) {
       xi <- sp$x[i]
       xterm <- paste0("(x - ", fmt(xi), ")")
@@ -1067,7 +1070,7 @@ server <- function(input, output, session) {
         signed_term(sp$d[i], paste0(xterm, "^3"))
       )
     }
-
+    
     # --- Section 1: header ---
     header_html <- paste0(
       "<div class='card solution-section'>",
@@ -1078,7 +1081,7 @@ server <- function(input, output, session) {
       "<strong>Calculator</strong> tab and this view updates live.</p>",
       "</div>"
     )
-
+    
     # --- Section 2: input data ---
     pts_rows <- paste(sapply(seq_len(n + 1), function(i) {
       sprintf("<tr><td>%d</td><td>%s</td><td>%s</td></tr>",
@@ -1091,7 +1094,7 @@ server <- function(input, output, session) {
       "<tr><th>i</th><th>x<sub>i</sub></th><th>y<sub>i</sub></th></tr>",
       pts_rows, "</table></div>"
     )
-
+    
     # --- Section 3: coefficient table ---
     coef_rows <- paste(sapply(seq_len(n), function(i) {
       sprintf(
@@ -1110,7 +1113,7 @@ server <- function(input, output, session) {
       "<th>b<sub>i</sub></th><th>c<sub>i</sub></th><th>d<sub>i</sub></th></tr>",
       coef_rows, "</table></div>"
     )
-
+    
     # --- Section 4: piecewise polynomial list (LaTeX) ---
     poly_lines <- sapply(seq_len(n), function(i) {
       sprintf("$$S_{%d}(x) = %s, \\quad x \\in [%s, %s]$$",
@@ -1122,7 +1125,7 @@ server <- function(input, output, session) {
       paste(poly_lines, collapse = ""),
       "</div>"
     )
-
+    
     # --- Section 5: combined piecewise function ---
     cases_rows <- paste(sapply(seq_len(n), function(i) {
       sprintf("%s, & x \\in [%s, %s]",
@@ -1134,7 +1137,7 @@ server <- function(input, output, session) {
       "$$S(x) = \\begin{cases} ", cases_rows, " \\end{cases}$$",
       "</div>"
     )
-
+    
     # --- Section 6: interpolated value callout ---
     if (is.na(xq)) {
       callout_html <- paste0(
@@ -1154,7 +1157,7 @@ server <- function(input, output, session) {
       i   <- i_r - 1
       dx  <- xq - sp$x[i_r]
       val <- sp$a[i_r] + sp$b[i_r] * dx +
-             sp$c[i_r] * dx^2 + sp$d[i_r] * dx^3
+        sp$c[i_r] * dx^2 + sp$d[i_r] * dx^3
       callout_html <- sprintf(paste0(
         "<div class='solution-callout'>",
         "<div style='font-size:20px; margin-bottom:8px;'>",
@@ -1169,7 +1172,7 @@ server <- function(input, output, session) {
         fmt(xq), fmt(sp$x[i_r]), fmt(dx),
         fmt(xq), i, fmt(xq), fmt(val))
     }
-
+    
     withMathJax(HTML(paste0(
       header_html, inputs_html, coef_html,
       poly_html, combined_html, callout_html
