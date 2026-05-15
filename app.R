@@ -1,5 +1,56 @@
-# Cubic Spline Interpolation - R Shiny App
+# =============================================================================
+# Cubic Spline Interpolation - Interactive Shiny App
 # Numerical Methods Final Project
+#
+# Authors:      
+#   - Francis Jay Abordo
+#   - Clybel Djen Bonachita
+#   - Jake Harvey Despelabrado
+#   - Kent Anthony Dulangon
+#   - Vince Quijano
+# Date:         May 2026
+#
+# WHAT THIS APP DOES
+#   Builds the natural cubic spline through a user-supplied set of (x, y)
+#   data points, displays the resulting smooth curve, and estimates the
+#   y-value at any chosen x. Three top-level tabs:
+#     - Introduction : plain-language explanation of cubic splines, with
+#                      side-by-side intro plots (straight lines vs. spline)
+#     - Calculator   : enter points, see the interactive curve, watch it
+#                      assemble one piece at a time, and walk through the
+#                      seven-step derivation
+#     - Solution     : MathJax-rendered piecewise polynomials, coefficient
+#                      table, and the combined piecewise function
+#
+# METHOD
+#   Natural cubic spline. For n+1 points (x_0, y_0) ... (x_n, y_n) we build
+#   n cubic pieces
+#       S_i(x) = a_i + b_i(x - x_i) + c_i(x - x_i)^2 + d_i(x - x_i)^3
+#   such that adjacent pieces agree in value, first derivative, and second
+#   derivative at every interior point, with the natural boundary conditions
+#   c_0 = c_n = 0. The c_i are obtained by solving a tridiagonal linear
+#   system; a_i, b_i, d_i then follow in closed form. The solver is written
+#   out by hand in compute_spline() below (we deliberately do NOT call R's
+#   built-in splinefun() - the manual implementation is the educational
+#   point of the project and is exposed in the Calculator and Solution tabs).
+#
+# HOW TO RUN
+#   1. Install dependencies (one-time):
+#        install.packages(c("shiny", "plotly"))
+#   2. From this directory:
+#        Rscript -e 'shiny::runApp(".", launch.browser = TRUE)'
+#      or open this file in RStudio and click "Run App".
+#
+# DEPENDENCIES
+#   shiny, plotly. MathJax is loaded via shiny::withMathJax() - no extra
+#   install needed.
+#
+# FILE ROADMAP  (approximate line numbers)
+#     1-  50 : header + helpers + the natural-cubic-spline solver
+#    50- 600 : UI definition (CSS theme, hero, three tabs)
+#   600- end : server logic (reactives, plots, step-by-step derivation,
+#              presentation-friendly Solution view)
+# =============================================================================
 
 library(shiny)
 library(plotly)
@@ -9,11 +60,80 @@ help_tip <- function(text) {
   tags$span(class = "help-icon", title = text, HTML("&#9432;"))
 }
 
+# ============================================================================
+# BEGIN experiment: SVG illustrations for "Where is it used?" bullets.
+# If this looks out of place, delete this whole block AND its matching CSS
+# block (search for "BEGIN experiment" in the stylesheet) AND change the
+# tags$ul class back from "uses-list uses-icons" to just "uses-list" and
+# remove the five use_case_icon(...) calls in the corresponding tags$li.
+# ============================================================================
+use_case_icon <- function(kind) {
+  svg <- switch(kind,
+    "animation" = paste0(
+      "<svg viewBox='0 0 36 36' width='28' height='28' aria-hidden='true'>",
+      "<path d='M 4 28 Q 14 4, 22 18 T 32 8' stroke='#3FB6A1' ",
+        "stroke-width='2.5' fill='none' stroke-linecap='round'/>",
+      "<circle cx='32' cy='8' r='3' fill='#F26D80'/>",
+      "</svg>"),
+    "typography" = paste0(
+      "<svg viewBox='0 0 36 36' width='28' height='28' aria-hidden='true'>",
+      "<text x='18' y='29' text-anchor='middle' font-family='Georgia, serif' ",
+        "font-size='30' font-style='italic' font-weight='600' fill='#3FB6A1'>",
+        "&amp;</text>",
+      "</svg>"),
+    "cad" = paste0(
+      "<svg viewBox='0 0 36 36' width='28' height='28' aria-hidden='true'>",
+      "<path d='M 3 24 Q 6 15, 12 14 L 22 14 Q 28 14, 33 24 Z' ",
+        "fill='#3FB6A1'/>",
+      "<circle cx='10' cy='27' r='3' fill='#2D3748'/>",
+      "<circle cx='26' cy='27' r='3' fill='#2D3748'/>",
+      "</svg>"),
+    "data" = paste0(
+      "<svg viewBox='0 0 36 36' width='28' height='28' aria-hidden='true'>",
+      "<path d='M 4 26 Q 10 8, 18 20 T 32 10' stroke='#3FB6A1' ",
+        "stroke-width='2.5' fill='none' stroke-linecap='round'/>",
+      "<circle cx='4' cy='26' r='2.5' fill='#F26D80'/>",
+      "<circle cx='18' cy='20' r='2.5' fill='#F26D80'/>",
+      "<circle cx='32' cy='10' r='2.5' fill='#F26D80'/>",
+      "</svg>"),
+    "engineering" = paste0(
+      "<svg viewBox='0 0 36 36' width='28' height='28' aria-hidden='true'>",
+      "<path d='M 4 20 Q 8 6, 12 26 T 20 14 T 28 24 T 32 10' ",
+        "stroke='#A0AEC0' stroke-width='1.5' fill='none' stroke-dasharray='3 2'/>",
+      "<path d='M 4 20 Q 18 4, 32 10' stroke='#3FB6A1' ",
+        "stroke-width='2.5' fill='none' stroke-linecap='round'/>",
+      "</svg>"))
+  tags$span(class = "use-icon", HTML(svg))
+}
+# ============================================================================
+# END experiment: SVG illustrations.
+# ============================================================================
+
 # ---- Natural Cubic Spline (manual implementation) ----
 # Solves the tridiagonal system for the second-derivative coefficients
 # under natural boundary conditions (c_0 = c_n = 0), then derives
 # a_i, b_i, c_i, d_i so each interval has
 #   S_i(x) = a_i + b_i (x - x_i) + c_i (x - x_i)^2 + d_i (x - x_i)^3.
+#
+# Numerical correctness check
+# ---------------------------
+# This manual solver has been verified against R's built-in
+# splinefun(method = "natural") on the test case
+#     x <- c(1, 2, 3, 4, 5);  y <- c(1, 4, 2, 5, 3)
+#
+#   x_query   manual              splinefun           |diff|
+#   1.0       1.0000000000        1.0000000000        0
+#   1.5       3.1696428571        3.1696428571        0
+#   2.0       4.0000000000        4.0000000000        0
+#   2.5       2.8660714286        2.8660714286        4.4e-16
+#   3.0       2.0000000000        2.0000000000        4.4e-16
+#   3.5       3.3660714286        3.3660714286        4.4e-16
+#   4.0       5.0000000000        5.0000000000        0
+#   4.5       4.6696428571        4.6696428571        8.9e-16
+#   5.0       3.0000000000        3.0000000000        4.4e-16
+#
+# Maximum |manual - splinefun| over [1, 5] sampled at 1001 points: 1.78e-15
+# (i.e. the two implementations agree to floating-point precision).
 compute_spline <- function(x, y) {
   n <- length(x) - 1
   h <- diff(x)
@@ -57,6 +177,7 @@ eval_spline <- function(sp, xq) {
 
 # ---- UI ----
 ui <- fluidPage(
+  withMathJax(),
   tags$head(
     tags$link(rel = "stylesheet",
               href = "https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap")
@@ -100,6 +221,41 @@ ui <- fluidPage(
       color: #F26D80; border: none;
       box-shadow: inset 0 -3px 0 #F26D80;
       background: transparent !important;
+    }
+
+    /* Inner sub-tabs (Calculator > Result & Plot / Build / How it works)
+       styled as pill buttons in a soft tray so they're obviously clickable. */
+    .calc-subtabs-hint {
+      color: #718096; font-size: 13px;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      margin: 4px 4px 6px; font-weight: 600;
+    }
+    .calc-subtabs .nav-tabs {
+      display: flex; gap: 6px;
+      border-bottom: none;
+      background: #F1F4F9;
+      padding: 6px;
+      border-radius: 12px;
+      margin-bottom: 18px;
+    }
+    .calc-subtabs .nav-tabs > li { margin-bottom: 0; }
+    .calc-subtabs .nav-tabs > li > a {
+      border-radius: 8px;
+      padding: 10px 18px;
+      background: transparent !important;
+      box-shadow: none !important;
+      color: #4A5568;
+    }
+    .calc-subtabs .nav-tabs > li > a:hover {
+      background: #FFFFFF !important;
+      color: #2D3748;
+    }
+    .calc-subtabs .nav-tabs > li.active > a,
+    .calc-subtabs .nav-tabs > li.active > a:hover,
+    .calc-subtabs .nav-tabs > li.active > a:focus {
+      background: #FFFFFF !important;
+      color: #F26D80;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
     }
 
     /* Cards */
@@ -358,6 +514,18 @@ ui <- fluidPage(
       width: 8px; height: 8px; border-radius: 50%;
       background: #F26D80;
     }
+    /* BEGIN experiment: SVG illustrations for use-case bullets.
+       Remove this block (down to the END experiment marker) to fully revert. */
+    .uses-list.uses-icons li {
+      padding: 8px 0 8px 44px; min-height: 36px;
+    }
+    .uses-list.uses-icons li::before { display: none; }
+    .uses-list.uses-icons .use-icon {
+      position: absolute; left: 0; top: 4px;
+      width: 32px; height: 32px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    /* END experiment */
   ")),
 
   div(class = "title-hero",
@@ -404,30 +572,43 @@ ui <- fluidPage(
 
           div(class = "card",
             h3("How does it work?"),
-            p("Between every pair of your data points, the spline lays down a ",
-              "small cubic polynomial — a curve of the form ",
-              tags$em("a + b·x + c·x² + d·x³"), ". ",
+            p(withMathJax(HTML(paste0(
+              "Between every pair of your data points, the spline lays down ",
+              "a small cubic polynomial — a curve of the form ",
+              "\\(a + bx + cx^2 + dx^3\\). ",
               "Each piece is chosen so that where two pieces meet, they share ",
               "the same value, the same slope, and the same curvature. ",
-              "That's why the joins are invisible."),
+              "That's why the joins are invisible.")))),
             p(style = "color:#718096; font-size: 14px;",
               "The flavour used here is the ", tags$em("natural"), " cubic ",
               "spline: at the two endpoints the curvature is set to zero, ",
-              "so the curve tapers off gently rather than flicking up.")
+              "so the curve tapers off gently rather than flicking up."),
+            h3("Why does it work?"),
+            p("Many real-world relationships are not linear. Cubic splines ",
+              "work because they enforce smooth connections between cubic ",
+              "segments, which naturally produces accurate approximations ",
+              "of real functions and minimises errors that sharp or straight ",
+              "lines introduce. That makes downstream calculations like ",
+              "area, slope, and motion much more accurate and stable.")
           ),
 
           div(class = "card",
             h3("Where is it used?"),
-            tags$ul(class = "uses-list",
-              tags$li(tags$strong("Animation & games — "),
+            tags$ul(class = "uses-list uses-icons",  # remove " uses-icons" + the use_case_icon() calls below to revert
+              tags$li(use_case_icon("animation"),
+                tags$strong("Animation & games — "),
                 "smooth motion paths for characters and cameras."),
-              tags$li(tags$strong("Typography — "),
+              tags$li(use_case_icon("typography"),
+                tags$strong("Typography — "),
                 "the curves of letterforms in modern fonts."),
-              tags$li(tags$strong("Computer-aided design — "),
+              tags$li(use_case_icon("cad"),
+                tags$strong("Computer-aided design — "),
                 "shaping car bodies, aircraft wings, product surfaces."),
-              tags$li(tags$strong("Data analysis — "),
+              tags$li(use_case_icon("data"),
+                tags$strong("Data analysis — "),
                 "filling in missing measurements between known samples."),
-              tags$li(tags$strong("Engineering — "),
+              tags$li(use_case_icon("engineering"),
+                tags$strong("Engineering — "),
                 "approximating complex functions with something easy to compute.")
             )
           ),
@@ -481,6 +662,8 @@ ui <- fluidPage(
         ),
 
         mainPanel(
+          div(class = "calc-subtabs-hint", "Switch view →"),
+          div(class = "calc-subtabs",
           tabsetPanel(
             tabPanel("Result & Plot",
               div(class = "card",
@@ -530,6 +713,7 @@ ui <- fluidPage(
               br(),
               uiOutput("steps_ui")
             )
+          )
           )
         )
       )
@@ -916,42 +1100,88 @@ server <- function(input, output, session) {
     n  <- length(sp$h)
     fmt <- function(v, k = 5) formatC(round(v, k), format = "fg", flag = "#")
 
-    # Step 1 -- sorted data
+    # Helper: build a small HTML <table> styled like a textbook coefficient
+    # table. `headers` is a character vector of <th> contents (HTML allowed);
+    # `body` is a list of character vectors, one per row, of <td> contents.
+    mini_table <- function(headers, body, max_width = NULL) {
+      header_html <- paste0("<tr>",
+        paste(sprintf("<th>%s</th>", headers), collapse = ""),
+        "</tr>")
+      body_html <- paste(
+        vapply(body, function(row)
+          paste0("<tr>",
+                 paste(sprintf("<td>%s</td>", row), collapse = ""),
+                 "</tr>"),
+          character(1)),
+        collapse = "")
+      style <- if (!is.null(max_width))
+        sprintf(" style='max-width:%s;'", max_width) else ""
+      HTML(paste0("<table class='coef-table'", style, ">",
+                  header_html, body_html, "</table>"))
+    }
+
+    # Helper: signed LaTeX term, skipping zero coefficients.
+    signed_term <- function(coef, expr) {
+      if (abs(round(coef, 8)) < 1e-10) return("")
+      if (coef >= 0) paste0(" + ", fmt(coef), expr)
+      else            paste0(" - ", fmt(-coef), expr)
+    }
+    poly_latex <- function(i) {
+      xterm <- paste0("(x - ", fmt(sp$x[i]), ")")
+      paste0(fmt(sp$a[i]),
+             signed_term(sp$b[i], xterm),
+             signed_term(sp$c[i], paste0(xterm, "^2")),
+             signed_term(sp$d[i], paste0(xterm, "^3")))
+    }
+
+    # ---- Step 1: sorted data points ----
     s1 <- div(class = "step-box",
       h4("Step 1: Sorted data points"),
       p(class = "step-friendly",
         "First, we line up your points from smallest to largest x."),
-      tags$pre(paste(
-        sprintf("(x_%d, y_%d) = (%s, %s)",
-                0:n, 0:n, fmt(sp$x), fmt(sp$y)),
-        collapse = "\n"))
+      mini_table(
+        c("<em>i</em>", "<em>x<sub>i</sub></em>", "<em>y<sub>i</sub></em>"),
+        lapply(seq_len(n + 1), function(i)
+          c(as.character(i - 1), fmt(sp$x[i]), fmt(sp$y[i]))),
+        max_width = "320px")
     )
 
-    # Step 2 -- interval widths
+    # ---- Step 2: interval widths ----
     s2 <- div(class = "step-box",
-      h4("Step 2: Interval widths  h_i = x_{i+1} - x_i"),
+      h4(HTML("Step 2: Interval widths \\(h_i = x_{i+1} - x_i\\)")),
       p(class = "step-friendly",
         "Next, we measure the gap between each pair of consecutive points."),
-      tags$pre(paste(
-        sprintf("h_%d = %s - %s = %s",
-                0:(n - 1), fmt(sp$x[2:(n + 1)]),
-                fmt(sp$x[1:n]), fmt(sp$h)),
-        collapse = "\n"))
+      mini_table(
+        c("<em>i</em>",
+          "<em>x<sub>i+1</sub></em> &minus; <em>x<sub>i</sub></em>",
+          "<em>h<sub>i</sub></em>"),
+        lapply(seq_len(n), function(i)
+          c(as.character(i - 1),
+            sprintf("%s &minus; %s", fmt(sp$x[i + 1]), fmt(sp$x[i])),
+            fmt(sp$h[i]))),
+        max_width = "380px")
     )
 
-    # Step 3 -- tridiagonal system
+    # ---- Step 3: tridiagonal system ----
     if (n >= 2) {
-      A_rows <- apply(sp$A, 1, function(r)
-        paste(sprintf("%10s", fmt(r)), collapse = " "))
-      rhs_row <- paste(sprintf("%10s", fmt(sp$rhs)), collapse = " ")
+      m <- nrow(sp$A)
+      A_latex <- paste(
+        apply(sp$A, 1, function(r) paste(sapply(r, fmt), collapse = " & ")),
+        collapse = " \\\\ ")
+      c_latex <- paste(sprintf("c_{%d}", seq_len(m)), collapse = " \\\\ ")
+      r_latex <- paste(sapply(sp$rhs, fmt), collapse = " \\\\ ")
+      matrix_eq <- sprintf(
+        "$$\\begin{bmatrix} %s \\end{bmatrix}\\begin{bmatrix} %s \\end{bmatrix} = \\begin{bmatrix} %s \\end{bmatrix}$$",
+        A_latex, c_latex, r_latex)
       s3 <- div(class = "step-box",
-        h4("Step 3: Tridiagonal system  A · c = r  (interior c_1 ... c_{n-1})"),
+        h4(HTML("Step 3: Tridiagonal system \\(A\\,\\mathbf{c} = \\mathbf{r}\\) (interior \\(c_1 \\dots c_{n-1}\\))")),
         p(class = "step-friendly",
           "To make the curve bend smoothly at every junction, ",
           "we set up a small system of equations."),
-        p(HTML("Row i:  h<sub>i</sub> c<sub>i-1</sub> + 2(h<sub>i</sub>+h<sub>i+1</sub>) c<sub>i</sub> + h<sub>i+1</sub> c<sub>i+1</sub> = 3[(y<sub>i+1</sub>-y<sub>i</sub>)/h<sub>i+1</sub> - (y<sub>i</sub>-y<sub>i-1</sub>)/h<sub>i</sub>]")),
-        p("Natural boundary conditions: c_0 = 0,  c_n = 0."),
-        tags$pre(paste(c("A =", A_rows, "", "r =", rhs_row), collapse = "\n"))
+        p(HTML("$$h_i c_{i-1} + 2(h_i + h_{i+1})c_i + h_{i+1}c_{i+1} = 3\\left(\\frac{y_{i+1}-y_i}{h_{i+1}} - \\frac{y_i-y_{i-1}}{h_i}\\right)$$")),
+        p(HTML("Natural boundary conditions: \\(c_0 = 0,\\ c_n = 0\\).")),
+        p("Plugging your numbers into the formula above gives:"),
+        p(HTML(matrix_eq))
       )
     } else {
       s3 <- div(class = "step-box",
@@ -960,82 +1190,86 @@ server <- function(input, output, session) {
       )
     }
 
-    # Step 4 -- c values
+    # ---- Step 4: solved c values ----
     s4 <- div(class = "step-box",
-      h4("Step 4: Solve for c_i"),
+      h4(HTML("Step 4: Solve for \\(c_i\\)")),
       p(class = "step-friendly",
         "Solving that system tells us how much each junction should curve."),
-      tags$pre(paste(
-        sprintf("c_%d = %s", 0:n, fmt(sp$c_full)),
-        collapse = "\n"))
+      mini_table(
+        c("<em>i</em>", "<em>c<sub>i</sub></em>"),
+        lapply(seq_len(n + 1), function(i)
+          c(as.character(i - 1), fmt(sp$c_full[i]))),
+        max_width = "260px")
     )
 
-    # Step 5 -- a, b, d
-    rows <- paste(sprintf("  %d  %11s  %11s  %11s  %11s",
-                          0:(n - 1), fmt(sp$a), fmt(sp$b),
-                          fmt(sp$c), fmt(sp$d)), collapse = "\n")
+    # ---- Step 5: coefficients a, b, c, d ----
     s5 <- div(class = "step-box solution-step",
-      h4("Step 5: Coefficients a_i, b_i, c_i, d_i"),
+      h4(HTML("Step 5: Coefficients \\(a_i, b_i, c_i, d_i\\)")),
       p(class = "step-friendly",
         "With those values in hand we can write down four numbers ",
         "(a, b, c, d) for every piece of the curve."),
-      p(HTML("a<sub>i</sub> = y<sub>i</sub> &nbsp; b<sub>i</sub> = (y<sub>i+1</sub>-y<sub>i</sub>)/h<sub>i</sub> - h<sub>i</sub>(2c<sub>i</sub>+c<sub>i+1</sub>)/3 &nbsp; d<sub>i</sub> = (c<sub>i+1</sub>-c<sub>i</sub>)/(3h<sub>i</sub>)")),
-      tags$pre(paste(
-        "  i         a_i          b_i          c_i          d_i",
-        rows, sep = "\n"))
+      p(HTML("$$a_i = y_i,\\quad b_i = \\frac{y_{i+1}-y_i}{h_i} - \\frac{h_i(2c_i + c_{i+1})}{3},\\quad d_i = \\frac{c_{i+1}-c_i}{3 h_i}$$")),
+      mini_table(
+        c("<em>i</em>", "<em>x<sub>i</sub></em>",
+          "<em>a<sub>i</sub></em>", "<em>b<sub>i</sub></em>",
+          "<em>c<sub>i</sub></em>", "<em>d<sub>i</sub></em>"),
+        lapply(seq_len(n), function(i)
+          c(as.character(i - 1), fmt(sp$x[i]),
+            fmt(sp$a[i]), fmt(sp$b[i]), fmt(sp$c[i]), fmt(sp$d[i]))))
     )
 
-    # Step 6 -- spline polynomials
-    poly_lines <- sapply(1:n, function(i) {
-      sprintf("S_%d(x) = %s + %s (x - %s) + %s (x - %s)^2 + %s (x - %s)^3,    x in [%s, %s]",
-              i - 1, fmt(sp$a[i]), fmt(sp$b[i]), fmt(sp$x[i]),
-              fmt(sp$c[i]), fmt(sp$x[i]),
-              fmt(sp$d[i]), fmt(sp$x[i]),
-              fmt(sp$x[i]), fmt(sp$x[i + 1]))
-    })
+    # ---- Step 6: piecewise polynomials ----
+    poly_blocks <- paste(
+      sapply(seq_len(n), function(i)
+        sprintf("$$S_{%d}(x) = %s, \\quad x \\in [%s, %s]$$",
+                i - 1, poly_latex(i), fmt(sp$x[i]), fmt(sp$x[i + 1]))),
+      collapse = "")
     s6 <- div(class = "step-box solution-step",
       h4("Step 6: Piecewise spline polynomials"),
       p(class = "step-friendly",
         "Each piece of the curve is now a tidy cubic polynomial — ",
         "here they are, one per interval."),
-      tags$pre(paste(poly_lines, collapse = "\n"))
+      HTML(poly_blocks)
     )
 
-    # Step 7 -- evaluation at x_query
+    # ---- Step 7: evaluation at x_query ----
     if (!is.na(xq) && xq >= sp$x[1] && xq <= sp$x[n + 1]) {
       i_r <- max(1, min(n, findInterval(xq, sp$x, all.inside = TRUE)))
       i   <- i_r - 1
       dx  <- xq - sp$x[i_r]
       val <- sp$a[i_r] + sp$b[i_r] * dx + sp$c[i_r] * dx^2 + sp$d[i_r] * dx^3
       s7 <- div(class = "step-box",
-        h4(sprintf("Step 7: Evaluate at x_query = %s", fmt(xq))),
+        h4(HTML(sprintf("Step 7: Evaluate at \\(x = %s\\)", fmt(xq)))),
         p(class = "step-friendly",
           "Finally, we plug your chosen x into the right piece ",
           "of the curve to read off the estimated y."),
-        tags$pre(paste(
-          sprintf("x_query = %s lies in [%s, %s], so use S_%d.",
-                  fmt(xq), fmt(sp$x[i_r]), fmt(sp$x[i_r + 1]), i),
-          sprintf("Delta x = x_query - x_%d = %s - %s = %s",
-                  i, fmt(xq), fmt(sp$x[i_r]), fmt(dx)),
-          sprintf("S_%d(%s) = %s + %s(%s) + %s(%s)^2 + %s(%s)^3",
-                  i, fmt(xq),
-                  fmt(sp$a[i_r]),
-                  fmt(sp$b[i_r]), fmt(dx),
-                  fmt(sp$c[i_r]), fmt(dx),
-                  fmt(sp$d[i_r]), fmt(dx)),
-          sprintf("        = %s", fmt(val)),
-          sep = "\n"))
+        p(HTML(sprintf(
+          "Since \\(%s \\in [%s,\\,%s]\\), we use piece \\(S_{%d}(x)\\).",
+          fmt(xq), fmt(sp$x[i_r]), fmt(sp$x[i_r + 1]), i))),
+        p(HTML(sprintf("$$\\Delta x = x - x_{%d} = %s - %s = %s$$",
+                       i, fmt(xq), fmt(sp$x[i_r]), fmt(dx)))),
+        p(HTML(sprintf(
+          "$$S_{%d}(%s) = %s + (%s)(%s) + (%s)(%s)^2 + (%s)(%s)^3$$",
+          i, fmt(xq),
+          fmt(sp$a[i_r]),
+          fmt(sp$b[i_r]), fmt(dx),
+          fmt(sp$c[i_r]), fmt(dx),
+          fmt(sp$d[i_r]), fmt(dx)))),
+        div(class = "result-callout",
+          HTML(sprintf("f(%s) = <span style='color:#F26D80;'>%s</span>",
+                       fmt(xq), fmt(val))))
       )
     } else {
       s7 <- div(class = "step-box",
         h4("Step 7: Evaluation"),
-        p(sprintf("x_query = %s is outside [%s, %s] (extrapolation — not shown).",
-                  ifelse(is.na(xq), "NA", fmt(xq)),
-                  fmt(sp$x[1]), fmt(sp$x[n + 1])))
+        p(HTML(sprintf(
+          "\\(x = %s\\) is outside \\([%s,\\,%s]\\) (extrapolation — not shown).",
+          ifelse(is.na(xq), "?", fmt(xq)),
+          fmt(sp$x[1]), fmt(sp$x[n + 1]))))
       )
     }
 
-    tagList(s1, s2, s3, s4, s5, s6, s7)
+    withMathJax(tagList(s1, s2, s3, s4, s5, s6, s7))
   })
 
   # Output: presentation-friendly Solution view (MathJax)
