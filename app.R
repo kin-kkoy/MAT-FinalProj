@@ -5,7 +5,7 @@
 # Authors:      
 #   - Francis Jay Abordo
 #   - Clybel Djen Bonachita
-#   - Jake Harvey Despelabrado
+#   - Jake Harvey Despabeladero
 #   - Kent Anthony Dulangon
 #   - Vince Quijano
 # Date:         May 2026
@@ -650,6 +650,10 @@ ui <- fluidPage(
             column(6, actionButton("remove_row", "- Remove row", width = "100%"))
           ),
           br(),
+          fileInput("import_csv", "Import points (CSV)",
+                    accept = c(".csv")),
+          downloadButton("export_csv", "Download CSV", class = "btn-default"),
+          br(),
           uiOutput("point_inputs"),
           br(),
           tags$label("Estimate y at this x ",
@@ -738,10 +742,55 @@ server <- function(input, output, session) {
   default_x <- c(1, 2, 3, 4, 5, 6, 7)
   default_y <- c(2, 3, 5, 4, 6, 8, 7)
   n_points  <- reactiveVal(length(default_x))
+  imported_points <- reactiveVal(NULL)
 
   observeEvent(input$add_row,    n_points(n_points() + 1))
   observeEvent(input$remove_row, {
     if (n_points() > 3) n_points(n_points() - 1)
+  })
+
+  # CSV import: read a two-column CSV (x,y) and populate the inputs
+  observeEvent(input$import_csv, {
+    file <- input$import_csv
+    req(file)
+    df <- tryCatch(read.csv(file$datapath, header = TRUE, stringsAsFactors = FALSE),
+                   error = function(e) NULL)
+    if (is.null(df)) {
+      showNotification("Unable to read CSV file.", type = "error")
+      return()
+    }
+
+    # Accept files with columns named x/y (case-insensitive) or take first two columns
+    names_lower <- tolower(names(df))
+    if (all(c("x", "y") %in% names_lower)) {
+      xi <- which(names_lower == "x")[1]
+      yi <- which(names_lower == "y")[1]
+      pts <- data.frame(x = as.numeric(df[[xi]]), y = as.numeric(df[[yi]]))
+    } else if (ncol(df) >= 2) {
+      pts <- data.frame(x = as.numeric(df[[1]]), y = as.numeric(df[[2]]))
+    } else {
+      showNotification("CSV must have at least two columns for x and y.", type = "error")
+      return()
+    }
+
+    # Validate
+    if (any(is.na(pts$x)) || any(is.na(pts$y))) {
+      showNotification("CSV contains non-numeric values.", type = "error")
+      return()
+    }
+    if (nrow(pts) < 3) {
+      showNotification("Please provide at least 3 points in the CSV.", type = "error")
+      return()
+    }
+    if (any(duplicated(pts$x))) {
+      showNotification("CSV contains duplicate x values.", type = "error")
+      return()
+    }
+
+    pts <- pts[order(pts$x), , drop = FALSE]
+    imported_points(pts)
+    n_points(nrow(pts))
+    showNotification(sprintf("Imported %d points.", nrow(pts)), type = "message")
   })
 
   # Render the X/Y input table; preserve any values the user has typed in
@@ -750,7 +799,12 @@ server <- function(input, output, session) {
     isolate({
       get_val <- function(i, prefix, defaults) {
         v <- input[[paste0(prefix, "_", i)]]
-        if (is.null(v)) defaults[((i - 1) %% length(defaults)) + 1] else v
+        if (!is.null(v)) return(v)
+        imp <- imported_points()
+        if (!is.null(imp) && nrow(imp) >= i) {
+          if (prefix == "x") return(imp[i, "x"]) else return(imp[i, "y"])
+        }
+        defaults[((i - 1) %% length(defaults)) + 1]
       }
       cur_x <- vapply(seq_len(n), get_val, numeric(1),
                       prefix = "x", defaults = default_x)
@@ -833,6 +887,16 @@ server <- function(input, output, session) {
                        fmt(xq), fmt(yq))))
     }
   })
+
+  output$export_csv <- downloadHandler(
+    filename = function() sprintf("spline_points_%s.csv",
+                                 format(Sys.time(), "%Y%m%d-%H%M%S")),
+    content = function(file) {
+      d <- data_points()
+      df <- data.frame(x = d$x, y = d$y)
+      write.csv(df, file, row.names = FALSE)
+    }
+  )
 
   # Output: interactive spline plot (plotly)
   output$splinePlot <- renderPlotly({
