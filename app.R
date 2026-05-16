@@ -46,10 +46,10 @@
 #   install needed.
 #
 # FILE ROADMAP  (approximate line numbers)
-#     1-  50 : header + helpers + the natural-cubic-spline solver
-#    50- 600 : UI definition (CSS theme, hero, three tabs)
-#   600- end : server logic (reactives, plots, step-by-step derivation,
-#              presentation-friendly Solution view)
+#     1- 177 : header, helpers, and the natural-cubic-spline solver
+#   178- 775 : UI definition (CSS theme, hero, Introduction / Calculator / Solution tabs)
+#   776-1596 : server logic (reactives, plots, build-piece view, derivation steps, solution view)
+#  1597-1598 : Run App (shinyApp call)
 # =============================================================================
 
 library(shiny)
@@ -758,6 +758,9 @@ create_calculator_tab <- function() {
                    ", or any two numeric columns."),
           downloadButton("export_csv", "Download current points as CSV",
                          class = "btn-default btn-block-download"),
+          br(),
+          downloadButton("export_results", "Download results",
+                         class = "btn-default btn-block-download"),
           br(), br(),
           uiOutput("point_inputs"),
           br(),
@@ -1033,6 +1036,73 @@ server <- function(input, output, session) {
       write.csv(df, file, row.names = FALSE)
     }
   )
+
+  output$export_results <- downloadHandler(
+    filename = function() sprintf("spline_results_%s.txt",
+                                 format(Sys.time(), "%Y%m%d-%H%M%S")),
+    content = function(file) {
+      sp <- spline_data()
+      d  <- data_points()
+      xq <- input$x_query
+
+      fmt <- function(v) {
+        r <- round(v, 6)
+        formatC(r, format = "f", digits = 6)
+      }
+
+      lines <- c()
+      lines <- c(lines, sprintf("Cubic spline results  — generated: %s",
+                                format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+      lines <- c(lines, "")
+
+      lines <- c(lines, "Input points:")
+      lines <- c(lines, sprintf("%6s %14s %14s", "i", "x", "y"))
+      for (i in seq_along(d$x)) {
+        lines <- c(lines, sprintf("%6d %14s %14s", i - 1, fmt(d$x[i]), fmt(d$y[i])))
+      }
+      lines <- c(lines, "")
+
+      lines <- c(lines, "Spline coefficients (one row per interval):")
+      lines <- c(lines, sprintf("%4s %12s %12s %12s %12s %12s", "i", "x_i", "a", "b", "c", "d"))
+      n <- length(sp$h)
+      for (i in seq_len(n)) {
+        lines <- c(lines, sprintf("%4d %12s %12s %12s %12s %12s",
+                                  i - 1, fmt(sp$x[i]), fmt(sp$a[i]), fmt(sp$b[i]), fmt(sp$c[i]), fmt(sp$d[i])))
+      }
+      lines <- c(lines, "")
+
+      lines <- c(lines, "Piecewise polynomials:")
+      for (i in seq_len(n)) {
+        xi <- fmt(sp$x[i])
+        poly <- paste0(fmt(sp$a[i]),
+                       if (abs(sp$b[i]) > 0) paste0(" + ", fmt(sp$b[i]), "*(x - ", xi, ")") else "",
+                       if (abs(sp$c[i]) > 0) paste0(" + ", fmt(sp$c[i]), "*(x - ", xi, ")^2") else "",
+                       if (abs(sp$d[i]) > 0) paste0(" + ", fmt(sp$d[i]), "*(x - ", xi, ")^3") else "")
+        lines <- c(lines, sprintf("S_%d(x) = %s   for x in [%s, %s]", i - 1, poly, fmt(sp$x[i]), fmt(sp$x[i + 1])))
+      }
+      lines <- c(lines, "")
+
+      lines <- c(lines, "Evaluation:")
+      if (is.null(xq) || is.na(xq)) {
+        lines <- c(lines, "No x_query provided.")
+      } else if (xq < sp$x[1] || xq > sp$x[n + 1]) {
+        lines <- c(lines, sprintf("x_query = %s is outside data range [%s, %s] (extrapolation).",
+                                  fmt(xq), fmt(sp$x[1]), fmt(sp$x[n + 1])))
+      } else {
+        i_r <- max(1, min(n, findInterval(xq, sp$x, all.inside = TRUE)))
+        dx  <- xq - sp$x[i_r]
+        val <- sp$a[i_r] + sp$b[i_r] * dx + sp$c[i_r] * dx^2 + sp$d[i_r] * dx^3
+        lines <- c(lines, sprintf("x_query = %s", fmt(xq)))
+        lines <- c(lines, sprintf("Using piece S_%d (interval [%s, %s])", i_r - 1, fmt(sp$x[i_r]), fmt(sp$x[i_r + 1])))
+        lines <- c(lines, sprintf("Delta x = %s", fmt(dx)))
+        lines <- c(lines, sprintf("Estimated y = %s", fmt(val)))
+      }
+
+      writeLines(lines, con = file, useBytes = TRUE)
+    }
+  )
+
+  
 
   # Output: interactive spline plot (plotly)
   output$splinePlot <- renderPlotly({
