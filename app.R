@@ -46,10 +46,10 @@
 #   install needed.
 #
 # FILE ROADMAP  (approximate line numbers)
-#     1-  50 : header + helpers + the natural-cubic-spline solver
-#    50- 600 : UI definition (CSS theme, hero, three tabs)
-#   600- end : server logic (reactives, plots, step-by-step derivation,
-#              presentation-friendly Solution view)
+#     1- 177 : header, helpers, and the natural-cubic-spline solver
+#   178- 775 : UI definition (CSS theme, hero, Introduction / Calculator / Solution tabs)
+#   776-1596 : server logic (reactives, plots, build-piece view, derivation steps, solution view)
+#  1597-1598 : Run App (shinyApp call)
 # =============================================================================
 
 library(shiny)
