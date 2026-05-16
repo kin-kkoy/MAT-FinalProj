@@ -37,19 +37,19 @@
 # HOW TO RUN
 #   1. Install dependencies (one-time):
 #        install.packages(c("shiny", "plotly"))
-#   2. From this directory:
-#        Rscript -e 'shiny::runApp(".", launch.browser = TRUE)'
-#      or open this file in RStudio and click "Run App".
+#   2. Open this file in RStudio and click "Run App" (easiest), OR from this
+#      directory on the command line:
+#        Rscript -e 'shiny::runApp("FinalActivity_AbordoBonachitaDespabeladeroDulangonQuijano_Group1.R", launch.browser = TRUE)'
 #
 # DEPENDENCIES
 #   shiny, plotly. MathJax is loaded via shiny::withMathJax() - no extra
 #   install needed.
 #
 # FILE ROADMAP  (approximate line numbers)
-#     1- 177 : header, helpers, and the natural-cubic-spline solver
-#   178- 775 : UI definition (CSS theme, hero, Introduction / Calculator / Solution tabs)
-#   776-1596 : server logic (reactives, plots, build-piece view, derivation steps, solution view)
-#  1597-1598 : Run App (shinyApp call)
+#     1- 176 : header, helpers, and the natural-cubic-spline solver
+#   178- 901 : UI definition (CSS theme, hero, Introduction / Calculator / Solution tabs)
+#   903-1817 : server logic (reactives, plots, build-piece view, derivation steps, solution view)
+#  1819-1820 : Run App (shinyApp call)
 # =============================================================================
 
 library(shiny)
