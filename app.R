@@ -5,7 +5,7 @@
 # Authors:      
 #   - Francis Jay Abordo
 #   - Clybel Djen Bonachita
-#   - Jake Harvey Despelabrado
+#   - Jake Harvey Despabeladero
 #   - Kent Anthony Dulangon
 #   - Vince Quijano
 # Date:         May 2026
@@ -299,6 +299,31 @@ ui <- fluidPage(
       background: #EC5A6F; color: #FFFFFF;
       transform: translateY(-1px);
       box-shadow: 0 4px 10px rgba(242, 109, 128, 0.45);
+    }
+
+    /* Soft teal action button (e.g. Load example) */
+    .btn-soft-teal {
+      background: #E8F6F1; color: #1F6B5B;
+      border: 1px solid #BDE2D7; border-radius: 8px;
+      padding: 8px 14px; font-weight: 500; font-size: 14px;
+    }
+    .btn-soft-teal:hover, .btn-soft-teal:focus {
+      background: #D7EFE6; color: #1F6B5B;
+      border-color: #A0D9C6;
+    }
+
+    /* Import / export widgets */
+    .csv-hint {
+      margin-top: -8px; margin-bottom: 12px;
+      color: #718096; font-size: 12px; line-height: 1.4;
+    }
+    .csv-hint code {
+      background: #F7F8FB; color: #2D3748;
+      padding: 1px 5px; border-radius: 3px; font-size: 11px;
+    }
+    .btn-block-download {
+      display: block; width: 100%;
+      text-align: center;
     }
 
     /* Tooltip icon */
@@ -650,6 +675,19 @@ ui <- fluidPage(
             column(6, actionButton("remove_row", "- Remove row", width = "100%"))
           ),
           br(),
+          actionButton("load_example", "Load example data",
+                       width = "100%", class = "btn-soft-teal"),
+          br(), br(),
+          fileInput("import_csv", "Import from CSV",
+                    accept = c(".csv"),
+                    buttonLabel = "Choose CSV",
+                    placeholder = "No file selected"),
+          tags$div(class = "csv-hint",
+                   "Two columns, named ", tags$code("x"), " and ", tags$code("y"),
+                   ", or any two numeric columns."),
+          downloadButton("export_csv", "Download current points as CSV",
+                         class = "btn-default btn-block-download"),
+          br(), br(),
           uiOutput("point_inputs"),
           br(),
           tags$label("Estimate y at this x ",
@@ -735,27 +773,92 @@ ui <- fluidPage(
 # ---- Server ----
 server <- function(input, output, session) {
 
+  # Sample data used by the "Load example data" button (NOT shown on first load).
   default_x <- c(1, 2, 3, 4, 5, 6, 7)
   default_y <- c(2, 3, 5, 4, 6, 8, 7)
-  n_points  <- reactiveVal(length(default_x))
+  # The app opens with 7 blank rows -- no pre-filled numbers, so visitors are
+  # not confused into thinking the example output is "their" answer.
+  n_points  <- reactiveVal(7)
 
   observeEvent(input$add_row,    n_points(n_points() + 1))
   observeEvent(input$remove_row, {
     if (n_points() > 3) n_points(n_points() - 1)
   })
 
-  # Render the X/Y input table; preserve any values the user has typed in
+  # Helper: push a vector of x/y values into the visible numericInputs.
+  # Used by both "Load example" and the CSV import handler so that the
+  # values reliably overwrite anything already in the table.
+  push_points <- function(x, y) {
+    stopifnot(length(x) == length(y))
+    n_points(length(x))
+    for (i in seq_along(x)) {
+      updateNumericInput(session, sprintf("x_%d", i), value = x[i])
+      updateNumericInput(session, sprintf("y_%d", i), value = y[i])
+    }
+  }
+
+  # One-click: populate the table with the sample data.
+  observeEvent(input$load_example, push_points(default_x, default_y))
+
+  # CSV import: read a two-column CSV (x, y) and populate the inputs.
+  observeEvent(input$import_csv, {
+    file <- input$import_csv
+    req(file)
+    df <- tryCatch(read.csv(file$datapath, header = TRUE,
+                            stringsAsFactors = FALSE),
+                   error = function(e) NULL)
+    if (is.null(df)) {
+      showNotification("Unable to read CSV file.", type = "error")
+      return()
+    }
+
+    # Accept files with columns named x/y (case-insensitive) or, failing
+    # that, fall back to the first two columns.
+    names_lower <- tolower(names(df))
+    if (all(c("x", "y") %in% names_lower)) {
+      xi <- which(names_lower == "x")[1]
+      yi <- which(names_lower == "y")[1]
+      pts <- data.frame(x = suppressWarnings(as.numeric(df[[xi]])),
+                        y = suppressWarnings(as.numeric(df[[yi]])))
+    } else if (ncol(df) >= 2) {
+      pts <- data.frame(x = suppressWarnings(as.numeric(df[[1]])),
+                        y = suppressWarnings(as.numeric(df[[2]])))
+    } else {
+      showNotification("CSV must have at least two numeric columns.",
+                       type = "error")
+      return()
+    }
+
+    if (any(is.na(pts$x)) || any(is.na(pts$y))) {
+      showNotification("CSV contains non-numeric values.", type = "error")
+      return()
+    }
+    if (nrow(pts) < 3) {
+      showNotification("CSV needs at least 3 points.", type = "error")
+      return()
+    }
+    if (any(duplicated(pts$x))) {
+      showNotification("CSV contains duplicate x values.", type = "error")
+      return()
+    }
+
+    pts <- pts[order(pts$x), , drop = FALSE]
+    push_points(pts$x, pts$y)
+    showNotification(sprintf("Imported %d points.", nrow(pts)),
+                     type = "message")
+  })
+
+  # Render the X/Y input table. Each cell starts blank (NA); user typing or
+  # one of the loaders (Load example / CSV import) writes values in.
   output$point_inputs <- renderUI({
     n <- n_points()
     isolate({
-      get_val <- function(i, prefix, defaults) {
+      get_val <- function(i, prefix) {
         v <- input[[paste0(prefix, "_", i)]]
-        if (is.null(v)) defaults[((i - 1) %% length(defaults)) + 1] else v
+        if (is.null(v)) NA_real_ else suppressWarnings(as.numeric(v))
       }
-      cur_x <- vapply(seq_len(n), get_val, numeric(1),
-                      prefix = "x", defaults = default_x)
-      cur_y <- vapply(seq_len(n), get_val, numeric(1),
-                      prefix = "y", defaults = default_y)
+      cur_x <- vapply(seq_len(n), get_val, numeric(1), prefix = "x")
+      cur_y <- vapply(seq_len(n), get_val, numeric(1), prefix = "y")
     })
 
     header <- fluidRow(class = "header",
@@ -773,22 +876,22 @@ server <- function(input, output, session) {
     div(class = "points-table", header, rows)
   })
 
-  # Reactive: gather and validate user-entered points
+  # Reactive: gather and validate user-entered points.
   data_points <- reactive({
     n <- n_points()
     read_col <- function(prefix) {
       vapply(seq_len(n), function(i) {
         v <- input[[paste0(prefix, "_", i)]]
-        if (is.null(v)) NA_real_ else as.numeric(v)
+        if (is.null(v)) NA_real_ else suppressWarnings(as.numeric(v))
       }, numeric(1))
     }
     x <- read_col("x")
     y <- read_col("y")
 
     validate(
-      need(n >= 3, "Please provide at least 3 points."),
-      need(all(!is.na(x)), "All X values must be filled in."),
-      need(all(!is.na(y)), "All Y values must be filled in."),
+      need(n >= 3, "Add at least 3 points to see the spline."),
+      need(all(!is.na(x)), "Fill in every X value to see the spline."),
+      need(all(!is.na(y)), "Fill in every Y value to see the spline."),
       need(!any(duplicated(x)), "X values must be unique.")
     )
 
@@ -833,6 +936,16 @@ server <- function(input, output, session) {
                        fmt(xq), fmt(yq))))
     }
   })
+
+  output$export_csv <- downloadHandler(
+    filename = function() sprintf("spline_points_%s.csv",
+                                 format(Sys.time(), "%Y%m%d-%H%M%S")),
+    content = function(file) {
+      d <- data_points()
+      df <- data.frame(x = d$x, y = d$y)
+      write.csv(df, file, row.names = FALSE)
+    }
+  )
 
   # Output: interactive spline plot (plotly)
   output$splinePlot <- renderPlotly({
