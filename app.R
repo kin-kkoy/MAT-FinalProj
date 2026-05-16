@@ -175,13 +175,22 @@ eval_spline <- function(sp, xq) {
   sp$a[i] + sp$b[i] * dx + sp$c[i] * dx^2 + sp$d[i] * dx^3
 }
 
-# ---- UI ----
-ui <- fluidPage(
-  withMathJax(),
-  tags$head(
-    tags$link(rel = "stylesheet",
-              href = "https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap")
-  ),
+# ============================================================================
+# UI section builders
+# Each create_*() function returns one chunk of the UI tree. The
+# ui <- fluidPage(...) composition at the bottom of this section just stitches
+# them together, so the overall page layout stays readable at a glance.
+# ============================================================================
+
+# ---- Optional hero image at the top of the Introduction tab ----
+# Leave as NULL to skip; paste a base64 data URI here to enable. To convert
+# an image to base64 from R:
+#   base64enc::dataURI(file = "hero.jpg", mime = "image/jpeg")
+# Recommended dimensions: ~1600x500 (or any wide landscape crop). Keep file
+# size under ~100 KB after encoding to keep app.R reasonable.
+hero_image_uri <- NULL  # e.g. "data:image/jpeg;base64,/9j/4AAQSk..."
+
+create_styles <- function() {
   tags$style(HTML("
     /* ---- base palette ----
        coral  #F26D80   teal   #3FB6A1
@@ -202,10 +211,33 @@ ui <- fluidPage(
     p  { line-height: 1.55; }
     a  { color: #F26D80; }
 
+    /* Inline emphasis for key terms in prose -- soft coral marker-pen wash
+       under the text. Use with span(class = 'highlighted-text', 'term'). */
+    .highlighted-text {
+      background: linear-gradient(180deg,
+                                  transparent 62%,
+                                  rgba(242, 109, 128, 0.22) 62%);
+      font-weight: 500;
+      padding: 0 2px;
+    }
+
     /* Title panel */
     .title-hero { padding: 28px 20px 6px; }
     .title-hero h1 { margin: 0; font-weight: 600; }
     .title-hero .tagline { color: #718096; margin-top: 6px; font-size: 16px; }
+
+    /* Optional hero image at the top of the Introduction tab */
+    .intro-hero-image {
+      margin-bottom: 18px;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+    }
+    .intro-hero-image img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
 
     /* Tabs */
     .nav-tabs { border-bottom: 2px solid #E2E6EC; margin-bottom: 18px; }
@@ -371,6 +403,31 @@ ui <- fluidPage(
       background: #FFFBEC; border-color: #F2D27A;
     }
     .step-box.solution-step h4 { color: #7A5A00; }
+    /* Collapsible step boxes (each <details> opens by default; users can
+       click the heading to collapse a step they have already understood). */
+    details.step-box > summary {
+      list-style: none;
+      cursor: pointer;
+      padding-right: 28px;
+      position: relative;
+    }
+    details.step-box > summary::-webkit-details-marker { display: none; }
+    details.step-box > summary::after {
+      content: '▾';  /* down-pointing arrow */
+      position: absolute;
+      right: 4px; top: 10px;
+      color: #A0AEC0;
+      transition: transform 0.2s ease;
+      font-size: 14px;
+    }
+    details.step-box[open] > summary::after { transform: rotate(180deg); }
+    details.step-box > summary h4 {
+      display: inline-block;
+      margin: 0;
+      vertical-align: middle;
+    }
+    details.step-box > summary:hover h4 { color: #F26D80; }
+    details.step-box.solution-step > summary:hover h4 { color: #7A5A00; }
 
     /* Solution sections + coefficient table */
     .solution-section { margin-bottom: 24px; }
@@ -551,26 +608,36 @@ ui <- fluidPage(
       display: inline-flex; align-items: center; justify-content: center;
     }
     /* END experiment */
-  ")),
+  "))
+}
 
+create_hero <- function() {
   div(class = "title-hero",
     h1("Cubic Spline Interpolation"),
     div(class = "tagline",
       "Draw a smooth curve through any set of points — ",
       "an interactive guide to a classic numerical method.")
-  ),
+  )
+}
 
-  tabsetPanel(id = "main_tabs",
-    # ---- Introduction / Learn Tab ----
-    tabPanel("Introduction",
+create_intro_tab <- function() {
+  tabPanel("Introduction",
       fluidRow(
         column(width = 10, offset = 1,
+          # ---- Optional hero image (renders only if hero_image_uri is set) ----
+          if (!is.null(hero_image_uri)) {
+            div(class = "intro-hero-image",
+              img(src = hero_image_uri,
+                  alt = "Cubic spline interpolation in the real world"))
+          },
           div(class = "card card-hero",
             h2("What is a cubic spline?"),
             div(class = "tag",
               "Imagine connecting dots on a graph — but instead of straight ",
               "lines that kink at every point, you want one perfectly smooth ",
-              "curve. That's what a cubic spline does."
+              "curve. That's what a ",
+              span(class = "highlighted-text", "cubic spline"),
+              " does."
             )
           ),
 
@@ -602,16 +669,19 @@ ui <- fluidPage(
               "a small cubic polynomial — a curve of the form ",
               "\\(a + bx + cx^2 + dx^3\\). ",
               "Each piece is chosen so that where two pieces meet, they share ",
-              "the same value, the same slope, and the same curvature. ",
+              "<span class='highlighted-text'>the same value, the same slope, ",
+              "and the same curvature</span>. ",
               "That's why the joins are invisible.")))),
             p(style = "color:#718096; font-size: 14px;",
-              "The flavour used here is the ", tags$em("natural"), " cubic ",
-              "spline: at the two endpoints the curvature is set to zero, ",
-              "so the curve tapers off gently rather than flicking up."),
+              "The flavour used here is the ",
+              span(class = "highlighted-text", "natural"),
+              " cubic spline: at the two endpoints the curvature is set to ",
+              "zero, so the curve tapers off gently rather than flicking up."),
             h3("Why does it work?"),
             p("Many real-world relationships are not linear. Cubic splines ",
-              "work because they enforce smooth connections between cubic ",
-              "segments, which naturally produces accurate approximations ",
+              "work because they enforce ",
+              span(class = "highlighted-text", "smooth connections between cubic segments"),
+              ", which naturally produces accurate approximations ",
               "of real functions and minimises errors that sharp or straight ",
               "lines introduce. That makes downstream calculations like ",
               "area, slope, and motion much more accurate and stable.")
@@ -659,9 +729,10 @@ ui <- fluidPage(
           )
         )
       )
-    ),
+    )
+}
 
-    # ---- Calculator Tab ----
+create_calculator_tab <- function() {
     tabPanel("Calculator",
       sidebarLayout(
         sidebarPanel(
@@ -755,9 +826,10 @@ ui <- fluidPage(
           )
         )
       )
-    ),
+    )
+}
 
-    # ---- Solution Tab ----
+create_solution_tab <- function() {
     tabPanel("Solution",
       fluidRow(
         column(width = 10, offset = 1,
@@ -767,6 +839,21 @@ ui <- fluidPage(
         )
       )
     )
+}
+
+# ---- UI composition ----
+ui <- fluidPage(
+  withMathJax(),
+  tags$head(
+    tags$link(rel = "stylesheet",
+              href = "https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap")
+  ),
+  create_styles(),
+  create_hero(),
+  tabsetPanel(id = "main_tabs",
+    create_intro_tab(),
+    create_calculator_tab(),
+    create_solution_tab()
   )
 )
 
@@ -1248,8 +1335,8 @@ server <- function(input, output, session) {
     }
 
     # ---- Step 1: sorted data points ----
-    s1 <- div(class = "step-box",
-      h4("Step 1: Sorted data points"),
+    s1 <- tags$details(class = "step-box", open = NA,
+      tags$summary(h4("Step 1: Sorted data points")),
       p(class = "step-friendly",
         "First, we line up your points from smallest to largest x."),
       mini_table(
@@ -1260,8 +1347,8 @@ server <- function(input, output, session) {
     )
 
     # ---- Step 2: interval widths ----
-    s2 <- div(class = "step-box",
-      h4(HTML("Step 2: Interval widths \\(h_i = x_{i+1} - x_i\\)")),
+    s2 <- tags$details(class = "step-box", open = NA,
+      tags$summary(h4(HTML("Step 2: Interval widths \\(h_i = x_{i+1} - x_i\\)"))),
       p(class = "step-friendly",
         "Next, we measure the gap between each pair of consecutive points."),
       mini_table(
@@ -1286,8 +1373,8 @@ server <- function(input, output, session) {
       matrix_eq <- sprintf(
         "$$\\begin{bmatrix} %s \\end{bmatrix}\\begin{bmatrix} %s \\end{bmatrix} = \\begin{bmatrix} %s \\end{bmatrix}$$",
         A_latex, c_latex, r_latex)
-      s3 <- div(class = "step-box",
-        h4(HTML("Step 3: Tridiagonal system \\(A\\,\\mathbf{c} = \\mathbf{r}\\) (interior \\(c_1 \\dots c_{n-1}\\))")),
+      s3 <- tags$details(class = "step-box", open = NA,
+        tags$summary(h4(HTML("Step 3: Tridiagonal system \\(A\\,\\mathbf{c} = \\mathbf{r}\\) (interior \\(c_1 \\dots c_{n-1}\\))"))),
         p(class = "step-friendly",
           "To make the curve bend smoothly at every junction, ",
           "we set up a small system of equations."),
@@ -1297,15 +1384,15 @@ server <- function(input, output, session) {
         p(HTML(matrix_eq))
       )
     } else {
-      s3 <- div(class = "step-box",
-        h4("Step 3: Tridiagonal system"),
+      s3 <- tags$details(class = "step-box", open = NA,
+        tags$summary(h4("Step 3: Tridiagonal system")),
         p("Only one interval — no interior c values to solve.")
       )
     }
 
     # ---- Step 4: solved c values ----
-    s4 <- div(class = "step-box",
-      h4(HTML("Step 4: Solve for \\(c_i\\)")),
+    s4 <- tags$details(class = "step-box", open = NA,
+      tags$summary(h4(HTML("Step 4: Solve for \\(c_i\\)"))),
       p(class = "step-friendly",
         "Solving that system tells us how much each junction should curve."),
       mini_table(
@@ -1316,8 +1403,8 @@ server <- function(input, output, session) {
     )
 
     # ---- Step 5: coefficients a, b, c, d ----
-    s5 <- div(class = "step-box solution-step",
-      h4(HTML("Step 5: Coefficients \\(a_i, b_i, c_i, d_i\\)")),
+    s5 <- tags$details(class = "step-box solution-step", open = NA,
+      tags$summary(h4(HTML("Step 5: Coefficients \\(a_i, b_i, c_i, d_i\\)"))),
       p(class = "step-friendly",
         "With those values in hand we can write down four numbers ",
         "(a, b, c, d) for every piece of the curve."),
@@ -1337,8 +1424,8 @@ server <- function(input, output, session) {
         sprintf("$$S_{%d}(x) = %s, \\quad x \\in [%s, %s]$$",
                 i - 1, poly_latex(i), fmt(sp$x[i]), fmt(sp$x[i + 1]))),
       collapse = "")
-    s6 <- div(class = "step-box solution-step",
-      h4("Step 6: Piecewise spline polynomials"),
+    s6 <- tags$details(class = "step-box solution-step", open = NA,
+      tags$summary(h4("Step 6: Piecewise spline polynomials")),
       p(class = "step-friendly",
         "Each piece of the curve is now a tidy cubic polynomial — ",
         "here they are, one per interval."),
@@ -1351,8 +1438,8 @@ server <- function(input, output, session) {
       i   <- i_r - 1
       dx  <- xq - sp$x[i_r]
       val <- sp$a[i_r] + sp$b[i_r] * dx + sp$c[i_r] * dx^2 + sp$d[i_r] * dx^3
-      s7 <- div(class = "step-box",
-        h4(HTML(sprintf("Step 7: Evaluate at \\(x = %s\\)", fmt(xq)))),
+      s7 <- tags$details(class = "step-box", open = NA,
+        tags$summary(h4(HTML(sprintf("Step 7: Evaluate at \\(x = %s\\)", fmt(xq))))),
         p(class = "step-friendly",
           "Finally, we plug your chosen x into the right piece ",
           "of the curve to read off the estimated y."),
@@ -1373,8 +1460,8 @@ server <- function(input, output, session) {
                        fmt(xq), fmt(val))))
       )
     } else {
-      s7 <- div(class = "step-box",
-        h4("Step 7: Evaluation"),
+      s7 <- tags$details(class = "step-box", open = NA,
+        tags$summary(h4("Step 7: Evaluation")),
         p(HTML(sprintf(
           "\\(x = %s\\) is outside \\([%s,\\,%s]\\) (extrapolation — not shown).",
           ifelse(is.na(xq), "?", fmt(xq)),
