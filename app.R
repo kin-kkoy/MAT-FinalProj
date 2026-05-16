@@ -12,7 +12,7 @@ ui <- fluidPage(
     tabPanel("Introduction",
       fluidRow(
         column(width = 10, offset = 1,
-          h3("What is Cubic Spline Interpolation?"),
+          h2("What is Cubic Spline Interpolation?"),
           p("Cubic spline interpolation is a numerical method that fits a smooth",
             "curve through a set of data points by joining piecewise cubic",
             "polynomials between consecutive points."),
