@@ -463,6 +463,45 @@ create_styles <- function() {
       font-weight: 500; color: #7A2A3A;
     }
 
+    /* Spline accuracy (leave-one-out CV) card -- three-stat readout */
+    .accuracy-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 12px; margin: 14px 0 6px;
+    }
+    .accuracy-stat {
+      background: #F7F8FB; border: 1px solid #E2E6EC;
+      border-radius: 8px; padding: 14px 16px;
+    }
+    .accuracy-stat .label {
+      display: block; color: #718096;
+      font-size: 11px; letter-spacing: 0.08em;
+      text-transform: uppercase; font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .accuracy-stat .value {
+      color: #2D3748; font-weight: 600; font-size: 22px;
+      font-variant-numeric: tabular-nums;
+    }
+    .accuracy-stat.good .value  { color: #2D6A4F; }
+    .accuracy-stat.warn .value  { color: #7A2A3A; }
+    .accuracy-empty {
+      color: #718096; font-style: italic;
+      padding: 8px 0 4px;
+    }
+    .accuracy-detail-table { width: 100%; border-collapse: collapse;
+                             margin-top: 6px; font-size: 13px; }
+    .accuracy-detail-table th, .accuracy-detail-table td {
+      padding: 6px 10px; border-bottom: 1px solid #EEF0F4;
+      text-align: right; font-variant-numeric: tabular-nums;
+    }
+    .accuracy-detail-table th {
+      color: #A0AEC0; font-weight: 600; font-size: 11px;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      border-bottom: 2px solid #E2E6EC;
+    }
+    .accuracy-detail-table th:first-child,
+    .accuracy-detail-table td:first-child { text-align: left; }
+
     /* Calculation breakdown table -- ledger style, not code-y */
     .calc-table {
       width: 100%; border-collapse: collapse;
@@ -788,7 +827,8 @@ create_calculator_tab <- function() {
                   HTML("<strong>Tip:</strong> hover the curve to read values, ",
                        "drag a box to zoom in, double-click to reset.")),
                 plotlyOutput("splinePlot", height = "450px")
-              )
+              ),
+              uiOutput("accuracy_card")
             ),
             tabPanel("Build piece by piece",
               br(),
@@ -1025,6 +1065,101 @@ server <- function(input, output, session) {
           HTML(sprintf("f(%s) = <span style='color:#F26D80;'>%s</span>",
                        fmt(xq), fmt(yq))))
     }
+  })
+
+  # Output: spline accuracy via leave-one-out cross-validation.
+  # For each interior point we hide it, refit the spline through the rest,
+  # evaluate the refit at the held-out x, and measure |refit - actual|. The
+  # endpoints (i = 1 and i = n) are skipped: removing them would leave the
+  # held-out x outside the data range of the refit, which is extrapolation
+  # rather than a fair leave-one-out test.
+  output$accuracy_card <- renderUI({
+    d <- data_points()
+    n <- length(d$x)
+
+    fmt <- function(v) formatC(round(v, 5), format = "g", digits = 5)
+
+    if (n < 4) {
+      return(div(class = "card",
+        h4("How accurate is the spline?"),
+        p(class = "accuracy-empty",
+          "Add at least 4 points to estimate accuracy by leave-one-out ",
+          "cross-validation (each interior point needs at least 3 others ",
+          "around it to refit a spline).")))
+    }
+
+    interior_i <- 2:(n - 1)
+    errs <- vapply(interior_i, function(i) {
+      sp_loo <- compute_spline(d$x[-i], d$y[-i])
+      abs(eval_spline(sp_loo, d$x[i]) - d$y[i])
+    }, numeric(1))
+    rmse   <- sqrt(mean(errs^2))
+    maxerr <- max(errs)
+
+    # Per-point breakdown table for the collapsible <details> block
+    detail_rows <- paste(vapply(seq_along(interior_i), function(j) {
+      i <- interior_i[j]
+      sp_loo <- compute_spline(d$x[-i], d$y[-i])
+      yhat   <- eval_spline(sp_loo, d$x[i])
+      sprintf(paste0(
+        "<tr>",
+        "<td>(%s, %s)</td>",
+        "<td>%s</td><td>%s</td><td>%s</td>",
+        "</tr>"),
+        fmt(d$x[i]), fmt(d$y[i]),
+        fmt(yhat), fmt(d$y[i]), fmt(errs[j]))
+    }, character(1)), collapse = "")
+
+    div(class = "card",
+      h4("How accurate is the spline?"),
+      p(style = "color:#718096; font-size:14px; margin-top:-4px;",
+        HTML(paste0(
+          "If each interior point is hidden in turn and the spline refit ",
+          "through the rest, the refitted curve misses the held-out point ",
+          "by these amounts. This is ",
+          "<strong>leave-one-out cross-validation</strong> &mdash; a ",
+          "standard way to estimate how well an interpolation method ",
+          "generalises beyond the sampled points."))),
+
+      HTML(sprintf(paste0(
+        "<div class='accuracy-stats'>",
+        "  <div class='accuracy-stat good'>",
+        "    <span class='label'>Average miss (RMSE)</span>",
+        "    <span class='value'>%s</span>",
+        "  </div>",
+        "  <div class='accuracy-stat warn'>",
+        "    <span class='label'>Largest miss</span>",
+        "    <span class='value'>%s</span>",
+        "  </div>",
+        "  <div class='accuracy-stat'>",
+        "    <span class='label'>Points tested</span>",
+        "    <span class='value'>%d</span>",
+        "  </div>",
+        "</div>"),
+        fmt(rmse), fmt(maxerr), length(interior_i))),
+
+      tags$details(
+        tags$summary(style = "cursor: pointer; color: #718096; font-size: 13px;",
+                     "Per-point breakdown"),
+        HTML(paste0(
+          "<table class='accuracy-detail-table'>",
+          "<thead><tr>",
+          "<th>Held-out point (x, y)</th>",
+          "<th>Refit predicts</th>",
+          "<th>Actual y</th>",
+          "<th>|miss|</th>",
+          "</tr></thead><tbody>",
+          detail_rows,
+          "</tbody></table>"))
+      ),
+
+      p(style = "color: #A0AEC0; font-size: 12px; margin-top: 14px;",
+        HTML(paste0(
+          "Theory: for a smooth underlying function, the natural cubic ",
+          "spline's error decays as <em>O(h<sup>4</sup>)</em> in the ",
+          "interval width. Halving the spacing between points typically ",
+          "reduces the miss by about 16&times;.")))
+    )
   })
 
   output$export_csv <- downloadHandler(
